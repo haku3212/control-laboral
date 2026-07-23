@@ -33,17 +33,20 @@ class EmployeesRepository {
     required String code,
     required String fullName,
     String? documentNumber,
+    String? phone,
     String? jobTitle,
     String? notes,
     bool active = true,
   }) async {
     final empresaId = await _empresaId();
     final userId = _client.auth.currentUser?.id;
+
     final payload = {
       'empresa_id': empresaId,
       'code': code.trim(),
       'full_name': fullName.trim(),
       'document_number': _blankToNull(documentNumber),
+      'phone': _blankToNull(phone),
       'job_title': _blankToNull(jobTitle),
       'notes': _blankToNull(notes),
       'active': active,
@@ -63,17 +66,20 @@ class EmployeesRepository {
     required String code,
     required String fullName,
     String? documentNumber,
+    String? phone,
     String? jobTitle,
     String? notes,
     bool active = true,
   }) async {
     final empresaId = await _empresaId();
     final userId = _client.auth.currentUser?.id;
+
     final payload = {
       'empresa_id': empresaId,
       'code': code.trim(),
       'full_name': fullName.trim(),
       'document_number': _blankToNull(documentNumber),
+      'phone': _blankToNull(phone),
       'job_title': _blankToNull(jobTitle),
       'notes': _blankToNull(notes),
       'active': active,
@@ -88,10 +94,14 @@ class EmployeesRepository {
         .eq('empresa_id', empresaId)
         .eq('code', code.trim())
         .maybeSingle();
-    if (existing != null) return Employee.fromMap(existing);
+
+    if (existing != null) {
+      return Employee.fromMap(existing);
+    }
 
     final row =
         await _client.from('employees').insert(payload).select().single();
+
     return Employee.fromMap(row);
   }
 
@@ -105,16 +115,23 @@ class EmployeesRepository {
 
   Future<String> _empresaId() async {
     final userId = _client.auth.currentUser?.id;
-    if (userId == null) throw StateError('Sesion no iniciada.');
+
+    if (userId == null) {
+      throw StateError('Sesion no iniciada.');
+    }
+
     final row = await _client
         .from('profiles')
         .select('empresa_id')
         .eq('id', userId)
         .single();
+
     final empresaId = row['empresa_id'] as String?;
+
     if (empresaId == null || empresaId.isEmpty) {
       throw StateError('Tu usuario no tiene empresa asignada.');
     }
+
     return empresaId;
   }
 
