@@ -89,7 +89,7 @@ class DashboardScreen extends ConsumerWidget {
                   children: [
                     _StatCard('Trabajadores', '${data['employees']}',
                         Icons.groups_outlined),
-                    _StatCard('Registros hoy', '${data['entriesToday']}',
+                    _StatCard('Jornadas hoy', '${data['entriesToday']}',
                         Icons.today_outlined),
                     _StatCard('Tipos activos', '${data['workTypes']}',
                         Icons.work_outline),
@@ -108,7 +108,7 @@ class DashboardScreen extends ConsumerWidget {
               FilledButton.icon(
                 onPressed: () => context.go('/entries'),
                 icon: const Icon(Icons.add),
-                label: const Text('Nuevo registro'),
+                label: const Text('Ver jornadas'),
               ),
               OutlinedButton.icon(
                 onPressed: () => context.go('/entries'),
@@ -130,7 +130,7 @@ class DashboardScreen extends ConsumerWidget {
           const SizedBox(height: 20),
           const SectionCard(
             child: Text(
-              'Los pagos, planillas y recibos completos quedan reservados para fases posteriores.',
+              'El gerente revisa jornadas, define tarifas y confirma pagos dentro de su empresa.',
             ),
           ),
         ],

@@ -22,6 +22,8 @@ class _OperatorNewEntryScreenState
     extends ConsumerState<OperatorNewEntryScreen> {
   final _formKey = GlobalKey<FormState>();
   final _quantity = TextEditingController();
+  final _restMinutes = TextEditingController(text: '0');
+  final _overtime = TextEditingController(text: '0');
   final _note = TextEditingController();
   final _newEmployee = TextEditingController();
   final _newWorkType = TextEditingController();
@@ -29,12 +31,17 @@ class _OperatorNewEntryScreenState
   final _inlineWorkType = TextEditingController();
   String? _employeeId;
   String? _workTypeId;
+  String _attendanceStatus = 'presente';
   DateTime _workDate = DateTime.now();
+  TimeOfDay? _startTime;
+  TimeOfDay? _endTime;
   bool _saving = false;
 
   @override
   void dispose() {
     _quantity.dispose();
+    _restMinutes.dispose();
+    _overtime.dispose();
     _note.dispose();
     _newEmployee.dispose();
     _newWorkType.dispose();
@@ -55,12 +62,11 @@ class _OperatorNewEntryScreenState
         padding: const EdgeInsets.all(16),
         children: [
           Text(
-            'Nuevo registro',
+            'Jornada diaria',
             style: Theme.of(context).textTheme.titleLarge,
           ),
           const SizedBox(height: 8),
-          const Text(
-              'El registro quedara pendiente hasta que el admin lo revise.'),
+          const Text('Guarda borrador o envia la jornada al gerente.'),
           const SizedBox(height: 16),
           employees.when(
             loading: () => const LinearProgressIndicator(),
@@ -114,17 +120,106 @@ class _OperatorNewEntryScreenState
             label: const Text('Guardar nuevo trabajo'),
           ),
           const SizedBox(height: 12),
+          SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(
+                value: 'presente',
+                label: Text('Presente'),
+                icon: Icon(Icons.check_circle_outline),
+              ),
+              ButtonSegment(
+                value: 'falta_justificada',
+                label: Text('Justificada'),
+                icon: Icon(Icons.event_available_outlined),
+              ),
+              ButtonSegment(
+                value: 'falta_injustificada',
+                label: Text('Falta'),
+                icon: Icon(Icons.cancel_outlined),
+              ),
+            ],
+            selected: {_attendanceStatus},
+            onSelectionChanged: (value) {
+              setState(() => _attendanceStatus = value.first);
+            },
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _pickTime(isStart: true),
+                  icon: const Icon(Icons.login_outlined),
+                  label: Text(_startTime == null
+                      ? 'Entrada'
+                      : _startTime!.format(context)),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _pickTime(isStart: false),
+                  icon: const Icon(Icons.logout_outlined),
+                  label: Text(
+                      _endTime == null ? 'Salida' : _endTime!.format(context)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: TextFormField(
+                  controller: _restMinutes,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Descanso',
+                    suffixText: 'min',
+                    prefixIcon: Icon(Icons.free_breakfast_outlined),
+                  ),
+                  validator: (value) {
+                    final parsed = int.tryParse(value ?? '0');
+                    if (parsed == null || parsed < 0) return 'Invalido';
+                    return null;
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextFormField(
+                  controller: _overtime,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                    labelText: 'Horas extra',
+                    suffixText: 'h',
+                    prefixIcon: Icon(Icons.more_time_outlined),
+                  ),
+                  validator: (value) {
+                    final parsed =
+                        double.tryParse(value?.replaceAll(',', '.') ?? '0');
+                    if (parsed == null || parsed < 0) return 'Invalido';
+                    return null;
+                  },
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
           TextFormField(
             controller: _quantity,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             decoration: const InputDecoration(
-              labelText: 'Cantidad',
+              labelText: 'Horas normales o cantidad',
               prefixIcon: Icon(Icons.numbers),
             ),
             validator: (value) {
+              if (_attendanceStatus != 'presente') return null;
               final parsed = double.tryParse(value?.replaceAll(',', '.') ?? '');
-              if (parsed == null || parsed <= 0)
+              if (parsed == null || parsed <= 0) {
                 return 'Ingresa una cantidad valida';
+              }
               return null;
             },
           ),
@@ -149,10 +244,24 @@ class _OperatorNewEntryScreenState
             ),
           ),
           const SizedBox(height: 20),
-          FilledButton.icon(
-            onPressed: _saving ? null : _save,
-            icon: const Icon(Icons.send_outlined),
-            label: const Text('Enviar registro'),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _saving ? null : () => _save('draft'),
+                  icon: const Icon(Icons.save_outlined),
+                  label: const Text('Borrador'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: _saving ? null : () => _save('pending'),
+                  icon: const Icon(Icons.send_outlined),
+                  label: const Text('Enviar'),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -204,7 +313,28 @@ class _OperatorNewEntryScreenState
     }
   }
 
-  Future<void> _save() async {
+  Future<void> _pickTime({required bool isStart}) async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: isStart
+          ? (_startTime ?? TimeOfDay.now())
+          : (_endTime ?? TimeOfDay.now()),
+    );
+    if (picked == null) return;
+    setState(() {
+      if (isStart) {
+        _startTime = picked;
+      } else {
+        _endTime = picked;
+      }
+      final calculated = _calculatedNormalHours();
+      if (calculated != null) {
+        _quantity.text = calculated.toStringAsFixed(2);
+      }
+    });
+  }
+
+  Future<void> _save(String status) async {
     if (!_formKey.currentState!.validate()) return;
     final profile = await ref.read(currentProfileProvider.future);
     if (profile == null || !profile.isOperator) {
@@ -233,13 +363,26 @@ class _OperatorNewEntryScreenState
             employeeId: employeeId,
             workTypeId: workTypeId,
             workDate: _workDate,
-            quantity: double.parse(_quantity.text.replaceAll(',', '.')),
+            quantity: _attendanceStatus == 'presente'
+                ? double.parse(_quantity.text.replaceAll(',', '.'))
+                : 0,
+            status: status,
+            attendanceStatus: _attendanceStatus,
+            startTime: _toParts(_startTime),
+            endTime: _toParts(_endTime),
+            restMinutes: int.tryParse(_restMinutes.text) ?? 0,
+            overtimeHours:
+                double.tryParse(_overtime.text.replaceAll(',', '.')) ?? 0,
             note: _note.text,
           );
       ref.invalidate(operatorEntriesProvider);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Registro enviado para revision.')),
+        SnackBar(
+          content: Text(status == 'draft'
+              ? 'Borrador guardado.'
+              : 'Jornada enviada al gerente.'),
+        ),
       );
       context.go('/operator/entries');
     } catch (error) {
@@ -342,6 +485,22 @@ class _OperatorNewEntryScreenState
     return code.isEmpty
         ? DateTime.now().millisecondsSinceEpoch.toString()
         : code;
+  }
+
+  double? _calculatedNormalHours() {
+    if (_startTime == null || _endTime == null) return null;
+    final start = _startTime!.hour * 60 + _startTime!.minute;
+    var end = _endTime!.hour * 60 + _endTime!.minute;
+    if (end < start) end += 24 * 60;
+    final rest = int.tryParse(_restMinutes.text) ?? 0;
+    final minutes = end - start - rest;
+    if (minutes <= 0) return null;
+    return minutes / 60;
+  }
+
+  TimeOfDayParts? _toParts(TimeOfDay? time) {
+    if (time == null) return null;
+    return TimeOfDayParts(time.hour, time.minute);
   }
 
   Future<String?> _askText({

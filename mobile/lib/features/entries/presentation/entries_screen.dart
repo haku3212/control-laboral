@@ -58,16 +58,16 @@ class EntriesScreen extends ConsumerWidget {
                         const SizedBox(height: 4),
                         Text(item.note!),
                       ],
-                      if (item.status == 'draft') ...[
+                      if (item.status == 'draft' ||
+                          item.status == 'pending') ...[
                         const SizedBox(height: 10),
                         Row(
                           children: [
                             Expanded(
                               child: OutlinedButton.icon(
-                                onPressed: () =>
-                                    _setStatus(ref, item.id, 'void'),
+                                onPressed: () => _reject(context, ref, item.id),
                                 icon: const Icon(Icons.block),
-                                label: const Text('Anular'),
+                                label: const Text('Rechazar'),
                               ),
                             ),
                             const SizedBox(width: 10),
@@ -76,7 +76,7 @@ class EntriesScreen extends ConsumerWidget {
                                 onPressed: () =>
                                     _setStatus(ref, item.id, 'confirmed'),
                                 icon: const Icon(Icons.check),
-                                label: const Text('Confirmar'),
+                                label: const Text('Aprobar'),
                               ),
                             ),
                           ],
@@ -103,6 +103,43 @@ class EntriesScreen extends ConsumerWidget {
 
   Future<void> _setStatus(WidgetRef ref, String id, String status) async {
     await ref.read(workEntriesRepositoryProvider).updateStatus(id, status);
+    ref.invalidate(workEntriesProvider);
+  }
+
+  Future<void> _reject(
+    BuildContext context,
+    WidgetRef ref,
+    String id,
+  ) async {
+    final controller = TextEditingController();
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Motivo del rechazo'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(labelText: 'Observacion'),
+          minLines: 2,
+          maxLines: 4,
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(controller.text.trim()),
+            child: const Text('Rechazar'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (reason == null || reason.isEmpty) return;
+    await ref
+        .read(workEntriesRepositoryProvider)
+        .updateStatus(id, 'rejected', reason: reason);
     ref.invalidate(workEntriesProvider);
   }
 
@@ -167,8 +204,10 @@ class EntriesScreen extends ConsumerWidget {
   String _statusLabel(String status) {
     return switch (status) {
       'draft' => 'Pendiente',
+      'pending' => 'Pendiente',
       'confirmed' => 'Confirmado',
       'corrected' => 'Corregido',
+      'rejected' => 'Rechazado',
       'void' => 'Anulado',
       _ => status,
     };

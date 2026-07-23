@@ -227,6 +227,8 @@ class _EmployeePayrollCard extends ConsumerWidget {
                 Expanded(
                   child: FilledButton.icon(
                     onPressed: () async {
+                      final confirmed = await _confirmPayment(context);
+                      if (!confirmed) return;
                       await ref
                           .read(payrollRepositoryProvider)
                           .setPaid(summary.employeeId, true);
@@ -309,6 +311,29 @@ class _EmployeePayrollCard extends ConsumerWidget {
           amount: amount,
         );
     ref.invalidate(payrollSummariesProvider);
+  }
+
+  Future<bool> _confirmPayment(BuildContext context) async {
+    return await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Confirmar pago'),
+            content: Text(
+              'Se marcara como pagado ${money.format(summary.totalPayable)} para ${summary.employeeName}.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancelar'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Marcar pagado'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
   }
 }
 

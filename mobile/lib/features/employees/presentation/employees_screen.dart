@@ -38,9 +38,14 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
               value: employees,
               data: (items) {
                 final filtered = items
-                    .where((e) =>
-                        e.fullName.toLowerCase().contains(_query) ||
-                        e.code.toLowerCase().contains(_query))
+                    .where(
+                      (e) =>
+                          e.fullName.toLowerCase().contains(_query) ||
+                          e.code.toLowerCase().contains(_query) ||
+                          (e.documentNumber ?? '')
+                              .toLowerCase()
+                              .contains(_query),
+                    )
                     .toList();
                 if (filtered.isEmpty) {
                   return const EmptyState(
@@ -65,6 +70,13 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
                           trailing: Switch(
                             value: employee.active,
                             onChanged: (value) async {
+                              if (!value) {
+                                final confirmed = await _confirmDeactivate(
+                                  context,
+                                  employee.fullName,
+                                );
+                                if (!confirmed) return;
+                              }
                               await ref
                                   .read(employeesRepositoryProvider)
                                   .setActive(employee.id, value);
@@ -97,6 +109,32 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
       builder: (_) => _EmployeeForm(employee: employee),
     );
     ref.invalidate(employeesProvider);
+  }
+
+  Future<bool> _confirmDeactivate(
+    BuildContext context,
+    String employeeName,
+  ) async {
+    return await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Desactivar trabajador'),
+            content: Text(
+              'El historial de $employeeName se conservara. Solo dejara de aparecer como activo.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancelar'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Desactivar'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
   }
 }
 

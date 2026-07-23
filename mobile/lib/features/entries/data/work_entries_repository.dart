@@ -29,12 +29,14 @@ class WorkEntriesRepository {
     return [for (final row in rows) WorkEntry.fromMap(row)];
   }
 
-  Future<void> updateStatus(String id, String status) async {
+  Future<void> updateStatus(String id, String status, {String? reason}) async {
     final userId = _client.auth.currentUser?.id;
     await _client.from('work_entries').update({
       'status': status,
       'revisado_por': userId,
       'fecha_revision': DateTime.now().toIso8601String(),
+      'motivo_rechazo':
+          reason == null || reason.trim().isEmpty ? null : reason.trim(),
       'modificado_por': userId,
       'fecha_modificacion': DateTime.now().toIso8601String(),
     }).eq('id', id);

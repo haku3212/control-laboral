@@ -54,8 +54,10 @@ class OperatorEntriesScreen extends ConsumerWidget {
   String _statusLabel(String status) {
     return switch (status) {
       'draft' => 'Pendiente',
+      'pending' => 'Pendiente',
       'confirmed' => 'Confirmado',
       'corrected' => 'Corregido',
+      'rejected' => 'Rechazado',
       'void' => 'Anulado',
       _ => status,
     };

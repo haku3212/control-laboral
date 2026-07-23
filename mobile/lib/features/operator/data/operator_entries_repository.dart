@@ -42,10 +42,28 @@ class OperatorEntriesRepository {
     required String workTypeId,
     required DateTime workDate,
     required double quantity,
+    required String status,
+    required String attendanceStatus,
+    TimeOfDayParts? startTime,
+    TimeOfDayParts? endTime,
+    int restMinutes = 0,
+    double overtimeHours = 0,
     String? note,
   }) async {
     final userId = _client.auth.currentUser?.id;
     final empresaId = await _empresaId();
+    final duplicated = await _client
+        .from('work_entries')
+        .select('id')
+        .eq('empresa_id', empresaId)
+        .eq('employee_id', employeeId)
+        .eq('work_date', _dateFormat.format(workDate))
+        .neq('status', 'void')
+        .limit(1);
+    if (duplicated.isNotEmpty) {
+      throw StateError('Ya existe una jornada para este trabajador y fecha.');
+    }
+
     await _client.from('work_entries').insert({
       'empresa_id': empresaId,
       'employee_id': employeeId,
@@ -53,9 +71,14 @@ class OperatorEntriesRepository {
       'work_date': _dateFormat.format(workDate),
       'quantity': quantity,
       'horas_normales': quantity,
+      'horas_extra': overtimeHours,
+      'estado_asistencia': attendanceStatus,
+      'hora_entrada': startTime?.toDatabaseValue(),
+      'hora_salida': endTime?.toDatabaseValue(),
+      'minutos_descanso': restMinutes,
       'note': _blankToNull(note),
       'source': 'app',
-      'status': 'draft',
+      'status': status,
       'registered_by': userId,
       'creado_por': userId,
       'modificado_por': userId,
@@ -81,5 +104,18 @@ class OperatorEntriesRepository {
       throw StateError('Tu usuario no tiene empresa asignada.');
     }
     return empresaId;
+  }
+}
+
+class TimeOfDayParts {
+  const TimeOfDayParts(this.hour, this.minute);
+
+  final int hour;
+  final int minute;
+
+  String toDatabaseValue() {
+    final h = hour.toString().padLeft(2, '0');
+    final m = minute.toString().padLeft(2, '0');
+    return '$h:$m:00';
   }
 }

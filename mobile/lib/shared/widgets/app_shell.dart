@@ -40,7 +40,8 @@ class AppShell extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-            profile?.isOperator == true ? 'Mi jornada' : 'Control Laboral'),
+          profile?.isOperator == true ? 'Encargado' : 'Control Laboral',
+        ),
         actions: [
           IconButton(
             tooltip: 'Cerrar sesion',

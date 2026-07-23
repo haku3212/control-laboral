@@ -18,16 +18,16 @@ class OperatorHomeScreen extends ConsumerWidget {
       padding: const EdgeInsets.all(16),
       children: [
         Text(
-          'Hola, ${profile?.fullName ?? 'operario'}',
+          'Hola, ${profile?.fullName ?? 'encargado'}',
           style: Theme.of(context).textTheme.titleLarge,
         ),
         const SizedBox(height: 8),
-        const Text('Registra tu trabajo diario desde aqui.'),
+        const Text('Registra asistencia, horas y observaciones del dia.'),
         const SizedBox(height: 16),
         FilledButton.icon(
           onPressed: () => context.go('/operator/new'),
           icon: const Icon(Icons.add_task_outlined),
-          label: const Text('Registrar trabajo'),
+          label: const Text('Registrar jornada'),
         ),
         const SizedBox(height: 16),
         entries.when(
@@ -59,7 +59,7 @@ class OperatorHomeScreen extends ConsumerWidget {
         const SizedBox(height: 16),
         const SectionCard(
           child: Text(
-            'El operario puede agregar trabajadores y trabajos, pero no ve tarifas, subtotales ni pagos. El admin revisa y aprueba los registros.',
+            'El encargado registra trabajadores y jornadas. El gerente revisa, aprueba y calcula pagos.',
           ),
         ),
       ],
