@@ -12,29 +12,35 @@ class AppShell extends ConsumerWidget {
 
   static const _adminDestinations = [
     _Destination('/dashboard', Icons.home_outlined, Icons.home, 'Inicio'),
-    _Destination('/entries', Icons.assignment_outlined, Icons.assignment, 'Registros'),
+    _Destination(
+        '/entries', Icons.assignment_outlined, Icons.assignment, 'Registros'),
     _Destination('/payroll', Icons.payments_outlined, Icons.payments, 'Pagos'),
-    _Destination('/reports', Icons.bar_chart_outlined, Icons.bar_chart, 'Reportes'),
+    _Destination(
+        '/reports', Icons.bar_chart_outlined, Icons.bar_chart, 'Reportes'),
     _Destination('/more', Icons.more_horiz, Icons.more, 'Mas'),
   ];
 
   static const _operatorDestinations = [
     _Destination('/operator', Icons.home_outlined, Icons.home, 'Inicio'),
-    _Destination('/operator/new', Icons.add_task_outlined, Icons.add_task, 'Registrar'),
-    _Destination('/operator/entries', Icons.history_outlined, Icons.history, 'Mis registros'),
+    _Destination(
+        '/operator/new', Icons.add_task_outlined, Icons.add_task, 'Registrar'),
+    _Destination('/operator/entries', Icons.history_outlined, Icons.history,
+        'Mis registros'),
   ];
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final location = GoRouterState.of(context).matchedLocation;
     final profile = ref.watch(currentProfileProvider).valueOrNull;
-    final destinations =
-        profile?.isOperator == true ? _operatorDestinations : _adminDestinations;
+    final destinations = profile?.isOperator == true
+        ? _operatorDestinations
+        : _adminDestinations;
     final currentIndex = destinations.indexWhere((d) => d.path == location);
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(profile?.isOperator == true ? 'Mi jornada' : 'Control Laboral'),
+        title: Text(
+            profile?.isOperator == true ? 'Mi jornada' : 'Control Laboral'),
         actions: [
           IconButton(
             tooltip: 'Cerrar sesion',

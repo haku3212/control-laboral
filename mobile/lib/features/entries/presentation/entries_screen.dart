@@ -64,7 +64,8 @@ class EntriesScreen extends ConsumerWidget {
                           children: [
                             Expanded(
                               child: OutlinedButton.icon(
-                                onPressed: () => _setStatus(ref, item.id, 'void'),
+                                onPressed: () =>
+                                    _setStatus(ref, item.id, 'void'),
                                 icon: const Icon(Icons.block),
                                 label: const Text('Anular'),
                               ),
@@ -72,7 +73,8 @@ class EntriesScreen extends ConsumerWidget {
                             const SizedBox(width: 10),
                             Expanded(
                               child: FilledButton.icon(
-                                onPressed: () => _setStatus(ref, item.id, 'confirmed'),
+                                onPressed: () =>
+                                    _setStatus(ref, item.id, 'confirmed'),
                                 icon: const Icon(Icons.check),
                                 label: const Text('Confirmar'),
                               ),
@@ -122,7 +124,8 @@ class EntriesScreen extends ConsumerWidget {
           children: [
             TextField(
               controller: quantityController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
               decoration: const InputDecoration(labelText: 'Cantidad u horas'),
             ),
             const SizedBox(height: 12),
@@ -146,7 +149,8 @@ class EntriesScreen extends ConsumerWidget {
         ],
       ),
     );
-    final quantity = double.tryParse(quantityController.text.replaceAll(',', '.'));
+    final quantity =
+        double.tryParse(quantityController.text.replaceAll(',', '.'));
     final note = noteController.text;
     quantityController.dispose();
     noteController.dispose();

@@ -42,7 +42,8 @@ class RatesScreen extends ConsumerWidget {
                 return Card(
                   child: ListTile(
                     leading: const Icon(Icons.payments_outlined),
-                    title: Text('${rate.workTypeName} - ${money.format(rate.unitPrice)}'),
+                    title: Text(
+                        '${rate.workTypeName} - ${money.format(rate.unitPrice)}'),
                     subtitle: Text(
                       '${rate.employeeName ?? 'Tarifa general'}\nDesde ${date.format(rate.validFrom)}',
                     ),
@@ -66,7 +67,8 @@ class RatesScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _openForm(BuildContext context, WidgetRef ref, Rate? rate) async {
+  Future<void> _openForm(
+      BuildContext context, WidgetRef ref, Rate? rate) async {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -151,10 +153,12 @@ class _RateFormState extends ConsumerState<_RateForm> {
               const SizedBox(height: 12),
               TextFormField(
                 controller: _price,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
                 decoration: const InputDecoration(labelText: 'Precio unitario'),
                 validator: (value) {
-                  final parsed = double.tryParse(value?.replaceAll(',', '.') ?? '');
+                  final parsed =
+                      double.tryParse(value?.replaceAll(',', '.') ?? '');
                   if (parsed == null || parsed < 0) return 'Monto invalido';
                   return null;
                 },
@@ -170,7 +174,9 @@ class _RateFormState extends ConsumerState<_RateForm> {
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Vigente hasta'),
-                subtitle: Text(_validUntil == null ? 'Sin fin' : date.format(_validUntil!)),
+                subtitle: Text(_validUntil == null
+                    ? 'Sin fin'
+                    : date.format(_validUntil!)),
                 trailing: const Icon(Icons.event_busy_outlined),
                 onTap: () => _pickDate(false),
               ),

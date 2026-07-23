@@ -37,7 +37,8 @@ class PayrollScreen extends ConsumerWidget {
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              Text('Pagos estimados', style: Theme.of(context).textTheme.titleLarge),
+              Text('Pagos estimados',
+                  style: Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: 6),
               Text('Total trabajo: ${money.format(gross)}'),
               Text('A pagar: ${money.format(total)}'),
@@ -201,7 +202,8 @@ class _EmployeePayrollCard extends ConsumerWidget {
                 OutlinedButton(
                   onPressed: summary.isPaid
                       ? null
-                      : () => _addAdjustment(context, ref, summary, 'deduction'),
+                      : () =>
+                          _addAdjustment(context, ref, summary, 'deduction'),
                   child: const Text('Descuento'),
                 ),
               ],
@@ -268,7 +270,8 @@ class _EmployeePayrollCard extends ConsumerWidget {
           children: [
             TextField(
               controller: amountController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
               decoration: const InputDecoration(
                 labelText: 'Monto',
                 prefixText: 'Bs ',
@@ -374,7 +377,8 @@ class _PayrollLineTile extends ConsumerWidget {
           ),
           FilledButton(
             onPressed: () {
-              final parsed = double.tryParse(controller.text.replaceAll(',', '.'));
+              final parsed =
+                  double.tryParse(controller.text.replaceAll(',', '.'));
               Navigator.of(context).pop(parsed);
             },
             child: const Text('Guardar'),

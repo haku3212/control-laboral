@@ -33,7 +33,8 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
             .where((item) =>
                 item.employeeName.toLowerCase().contains(_query.toLowerCase()))
             .toList();
-        final total = filtered.fold(0.0, (sum, item) => sum + item.totalPayable);
+        final total =
+            filtered.fold(0.0, (sum, item) => sum + item.totalPayable);
 
         return ListView(
           padding: const EdgeInsets.all(16),

@@ -40,17 +40,25 @@ final appRouter = GoRouter(
     ShellRoute(
       builder: (context, state, child) => AppShell(child: child),
       routes: [
-        GoRoute(path: '/dashboard', builder: (_, __) => const DashboardScreen()),
+        GoRoute(
+            path: '/dashboard', builder: (_, __) => const DashboardScreen()),
         GoRoute(path: '/entries', builder: (_, __) => const EntriesScreen()),
         GoRoute(path: '/payroll', builder: (_, __) => const PayrollScreen()),
         GoRoute(path: '/reports', builder: (_, __) => const ReportsScreen()),
         GoRoute(path: '/more', builder: (_, __) => const SettingsScreen()),
-        GoRoute(path: '/employees', builder: (_, __) => const EmployeesScreen()),
-        GoRoute(path: '/work-types', builder: (_, __) => const WorkTypesScreen()),
+        GoRoute(
+            path: '/employees', builder: (_, __) => const EmployeesScreen()),
+        GoRoute(
+            path: '/work-types', builder: (_, __) => const WorkTypesScreen()),
         GoRoute(path: '/rates', builder: (_, __) => const RatesScreen()),
-        GoRoute(path: '/operator', builder: (_, __) => const OperatorHomeScreen()),
-        GoRoute(path: '/operator/new', builder: (_, __) => const OperatorNewEntryScreen()),
-        GoRoute(path: '/operator/entries', builder: (_, __) => const OperatorEntriesScreen()),
+        GoRoute(
+            path: '/operator', builder: (_, __) => const OperatorHomeScreen()),
+        GoRoute(
+            path: '/operator/new',
+            builder: (_, __) => const OperatorNewEntryScreen()),
+        GoRoute(
+            path: '/operator/entries',
+            builder: (_, __) => const OperatorEntriesScreen()),
       ],
     ),
   ],

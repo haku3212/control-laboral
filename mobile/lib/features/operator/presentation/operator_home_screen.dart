@@ -36,7 +36,8 @@ class OperatorHomeScreen extends ConsumerWidget {
           data: (items) => LayoutBuilder(
             builder: (context, constraints) {
               final pending = items.where((e) => e.status == 'draft').length;
-              final confirmed = items.where((e) => e.status == 'confirmed').length;
+              final confirmed =
+                  items.where((e) => e.status == 'confirmed').length;
               return GridView.count(
                 crossAxisCount: constraints.maxWidth > 520 ? 3 : 2,
                 crossAxisSpacing: 12,
@@ -45,9 +46,11 @@ class OperatorHomeScreen extends ConsumerWidget {
                 physics: const NeverScrollableScrollPhysics(),
                 childAspectRatio: 1.45,
                 children: [
-                  _StatCard('Ultimos registros', '${items.length}', Icons.history),
+                  _StatCard(
+                      'Ultimos registros', '${items.length}', Icons.history),
                   _StatCard('Pendientes', '$pending', Icons.pending_actions),
-                  _StatCard('Confirmados', '$confirmed', Icons.check_circle_outline),
+                  _StatCard(
+                      'Confirmados', '$confirmed', Icons.check_circle_outline),
                 ],
               );
             },

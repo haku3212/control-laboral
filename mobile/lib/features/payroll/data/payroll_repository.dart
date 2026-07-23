@@ -21,12 +21,14 @@ class PayrollRepository {
   final _dateFormat = DateFormat('yyyy-MM-dd');
 
   Future<List<EmployeePayrollSummary>> summaries() async {
+    final empresaId = await _empresaId();
     final period = await _currentPeriod();
     final entries = await _client
         .from('work_entries')
         .select(
           'id, employee_id, work_type_id, work_date, quantity, employees(full_name), work_types(name, unit)',
         )
+        .eq('empresa_id', empresaId)
         .eq('status', 'confirmed')
         .gte('work_date', period['start_date'])
         .lte('work_date', period['end_date'])
@@ -34,7 +36,9 @@ class PayrollRepository {
 
     final rates = await _client
         .from('rates')
-        .select('work_type_id, employee_id, unit_price, valid_from, valid_until, active')
+        .select(
+            'work_type_id, employee_id, unit_price, valid_from, valid_until, active')
+        .eq('empresa_id', empresaId)
         .eq('active', true)
         .order('valid_from', ascending: false);
 
@@ -70,7 +74,9 @@ class PayrollRepository {
 
     final payrolls = await _client
         .from('weekly_payrolls')
-        .select('id, employee_id, status, payroll_adjustments(id, type, concept, amount)')
+        .select(
+            'id, employee_id, status, payroll_adjustments(id, type, concept, amount)')
+        .eq('empresa_id', empresaId)
         .eq('weekly_period_id', period['id']);
     final payrollByEmployee = {
       for (final item in payrolls) item['employee_id'] as String: item,
@@ -99,7 +105,9 @@ class PayrollRepository {
     required double amount,
   }) async {
     final payroll = await _ensurePayroll(employeeId);
+    final empresaId = await _empresaId();
     await _client.from('payroll_adjustments').insert({
+      'empresa_id': empresaId,
       'payroll_id': payroll['id'],
       'type': type,
       'concept': concept.trim().isEmpty ? type : concept.trim(),
@@ -114,27 +122,35 @@ class PayrollRepository {
 
   Future<void> setPaid(String employeeId, bool paid) async {
     final payroll = await _ensurePayroll(employeeId);
+    final userId = _client.auth.currentUser?.id;
     await _client.from('weekly_payrolls').update({
       'status': paid ? 'paid' : 'approved',
       'paid_at': paid ? DateTime.now().toIso8601String() : null,
-      'paid_by': paid ? _client.auth.currentUser?.id : null,
+      'paid_by': paid ? userId : null,
+      'modificado_por': userId,
+      'fecha_modificacion': DateTime.now().toIso8601String(),
     }).eq('id', payroll['id']);
   }
 
   Future<void> closeCurrentWeek() async {
     final period = await _currentPeriod();
+    final userId = _client.auth.currentUser?.id;
     await _client.from('weekly_periods').update({
       'status': 'closed',
-      'closed_by': _client.auth.currentUser?.id,
+      'closed_by': userId,
       'closed_at': DateTime.now().toIso8601String(),
+      'modificado_por': userId,
+      'fecha_modificacion': DateTime.now().toIso8601String(),
     }).eq('id', period['id']);
   }
 
   Future<Map<String, dynamic>> _ensurePayroll(String employeeId) async {
+    final empresaId = await _empresaId();
     final period = await _currentPeriod();
     final existing = await _client
         .from('weekly_payrolls')
         .select()
+        .eq('empresa_id', empresaId)
         .eq('weekly_period_id', period['id'])
         .eq('employee_id', employeeId)
         .maybeSingle();
@@ -143,15 +159,20 @@ class PayrollRepository {
     return await _client
         .from('weekly_payrolls')
         .insert({
+          'empresa_id': empresaId,
           'weekly_period_id': period['id'],
           'employee_id': employeeId,
           'status': 'draft',
+          'creado_por': _client.auth.currentUser?.id,
+          'modificado_por': _client.auth.currentUser?.id,
+          'fecha_modificacion': DateTime.now().toIso8601String(),
         })
         .select()
         .single();
   }
 
   Future<Map<String, dynamic>> _currentPeriod() async {
+    final empresaId = await _empresaId();
     final now = DateTime.now();
     final start = DateTime(now.year, now.month, now.day)
         .subtract(Duration(days: now.weekday - 1));
@@ -162,6 +183,7 @@ class PayrollRepository {
     final existing = await _client
         .from('weekly_periods')
         .select()
+        .eq('empresa_id', empresaId)
         .eq('start_date', startText)
         .eq('end_date', endText)
         .maybeSingle();
@@ -170,9 +192,13 @@ class PayrollRepository {
     return await _client
         .from('weekly_periods')
         .insert({
+          'empresa_id': empresaId,
           'start_date': startText,
           'end_date': endText,
           'status': 'open',
+          'creado_por': _client.auth.currentUser?.id,
+          'modificado_por': _client.auth.currentUser?.id,
+          'fecha_modificacion': DateTime.now().toIso8601String(),
         })
         .select()
         .single();
@@ -207,5 +233,20 @@ class PayrollRepository {
 
     if (candidates.isEmpty) return null;
     return double.parse('${candidates.first['unit_price']}');
+  }
+
+  Future<String> _empresaId() async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) throw StateError('Sesion no iniciada.');
+    final row = await _client
+        .from('profiles')
+        .select('empresa_id')
+        .eq('id', userId)
+        .single();
+    final empresaId = row['empresa_id'] as String?;
+    if (empresaId == null || empresaId.isEmpty) {
+      throw StateError('Tu usuario no tiene empresa asignada.');
+    }
+    return empresaId;
   }
 }

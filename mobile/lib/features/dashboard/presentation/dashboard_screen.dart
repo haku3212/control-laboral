@@ -9,13 +9,37 @@ import '../../../shared/widgets/section_card.dart';
 final dashboardStatsProvider = FutureProvider<Map<String, int>>((ref) async {
   final client = ref.watch(supabaseClientProvider);
   final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+  final userId = client.auth.currentUser?.id;
+  if (userId == null) throw StateError('Sesion no iniciada.');
+  final profile = await client
+      .from('profiles')
+      .select('empresa_id')
+      .eq('id', userId)
+      .single();
+  final empresaId = profile['empresa_id'] as String?;
+  if (empresaId == null || empresaId.isEmpty) {
+    throw StateError('Tu usuario no tiene empresa asignada.');
+  }
 
-  final employees = await client.from('employees').select('id').eq('active', true);
-  final entriesToday = await client.from('work_entries').select('id').eq('work_date', today);
-  final workTypes = await client.from('work_types').select('id').eq('active', true);
+  final employees = await client
+      .from('employees')
+      .select('id')
+      .eq('empresa_id', empresaId)
+      .eq('active', true);
+  final entriesToday = await client
+      .from('work_entries')
+      .select('id')
+      .eq('empresa_id', empresaId)
+      .eq('work_date', today);
+  final workTypes = await client
+      .from('work_types')
+      .select('id')
+      .eq('empresa_id', empresaId)
+      .eq('active', true);
   final pending = await client
       .from('work_entries')
       .select('id')
+      .eq('empresa_id', empresaId)
       .eq('status', 'draft');
 
   return {
@@ -63,10 +87,14 @@ class DashboardScreen extends ConsumerWidget {
                   physics: const NeverScrollableScrollPhysics(),
                   childAspectRatio: 1.45,
                   children: [
-                    _StatCard('Trabajadores', '${data['employees']}', Icons.groups_outlined),
-                    _StatCard('Registros hoy', '${data['entriesToday']}', Icons.today_outlined),
-                    _StatCard('Tipos activos', '${data['workTypes']}', Icons.work_outline),
-                    _StatCard('Pendientes', '${data['pending']}', Icons.pending_actions),
+                    _StatCard('Trabajadores', '${data['employees']}',
+                        Icons.groups_outlined),
+                    _StatCard('Registros hoy', '${data['entriesToday']}',
+                        Icons.today_outlined),
+                    _StatCard('Tipos activos', '${data['workTypes']}',
+                        Icons.work_outline),
+                    _StatCard('Pendientes', '${data['pending']}',
+                        Icons.pending_actions),
                   ],
                 );
               },

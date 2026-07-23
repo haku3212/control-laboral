@@ -40,8 +40,7 @@ class EmployeePayrollSummary {
   final List<PayrollAdjustment> adjustments;
   final String status;
 
-  double get totalQuantity =>
-      lines.fold(0, (sum, line) => sum + line.quantity);
+  double get totalQuantity => lines.fold(0, (sum, line) => sum + line.quantity);
 
   double get totalPayable {
     final value = grossPayable + adjustmentSignedTotal;

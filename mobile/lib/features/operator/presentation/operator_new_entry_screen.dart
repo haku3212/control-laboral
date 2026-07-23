@@ -14,10 +14,12 @@ class OperatorNewEntryScreen extends ConsumerStatefulWidget {
   const OperatorNewEntryScreen({super.key});
 
   @override
-  ConsumerState<OperatorNewEntryScreen> createState() => _OperatorNewEntryScreenState();
+  ConsumerState<OperatorNewEntryScreen> createState() =>
+      _OperatorNewEntryScreenState();
 }
 
-class _OperatorNewEntryScreenState extends ConsumerState<OperatorNewEntryScreen> {
+class _OperatorNewEntryScreenState
+    extends ConsumerState<OperatorNewEntryScreen> {
   final _formKey = GlobalKey<FormState>();
   final _quantity = TextEditingController();
   final _note = TextEditingController();
@@ -57,12 +59,14 @@ class _OperatorNewEntryScreenState extends ConsumerState<OperatorNewEntryScreen>
             style: Theme.of(context).textTheme.titleLarge,
           ),
           const SizedBox(height: 8),
-          const Text('El registro quedara pendiente hasta que el admin lo revise.'),
+          const Text(
+              'El registro quedara pendiente hasta que el admin lo revise.'),
           const SizedBox(height: 16),
           employees.when(
             loading: () => const LinearProgressIndicator(),
             error: (error, _) => Text('No se cargaron trabajadores: $error'),
-            data: (items) => _employeeDropdown(items.where((e) => e.active).toList()),
+            data: (items) =>
+                _employeeDropdown(items.where((e) => e.active).toList()),
           ),
           const SizedBox(height: 8),
           TextField(
@@ -85,8 +89,10 @@ class _OperatorNewEntryScreenState extends ConsumerState<OperatorNewEntryScreen>
           const SizedBox(height: 8),
           workTypes.when(
             loading: () => const LinearProgressIndicator(),
-            error: (error, _) => Text('No se cargaron tipos de trabajo: $error'),
-            data: (items) => _workTypeDropdown(items.where((e) => e.active).toList()),
+            error: (error, _) =>
+                Text('No se cargaron tipos de trabajo: $error'),
+            data: (items) =>
+                _workTypeDropdown(items.where((e) => e.active).toList()),
           ),
           const SizedBox(height: 8),
           TextField(
@@ -117,7 +123,8 @@ class _OperatorNewEntryScreenState extends ConsumerState<OperatorNewEntryScreen>
             ),
             validator: (value) {
               final parsed = double.tryParse(value?.replaceAll(',', '.') ?? '');
-              if (parsed == null || parsed <= 0) return 'Ingresa una cantidad valida';
+              if (parsed == null || parsed <= 0)
+                return 'Ingresa una cantidad valida';
               return null;
             },
           ),
@@ -137,7 +144,8 @@ class _OperatorNewEntryScreenState extends ConsumerState<OperatorNewEntryScreen>
             decoration: const InputDecoration(
               labelText: 'Notas del trabajo',
               prefixIcon: Icon(Icons.notes_outlined),
-              hintText: 'Ej: trabajo en cisterna grande, llego tarde, faltaron bolsas',
+              hintText:
+                  'Ej: trabajo en cisterna grande, llego tarde, faltaron bolsas',
             ),
           ),
           const SizedBox(height: 20),
@@ -256,7 +264,9 @@ class _OperatorNewEntryScreenState extends ConsumerState<OperatorNewEntryScreen>
         .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
         .replaceAll(RegExp(r'^_|_$'), '');
     final employee = await ref.read(employeesRepositoryProvider).saveReturning(
-          code: code.isEmpty ? DateTime.now().millisecondsSinceEpoch.toString() : code,
+          code: code.isEmpty
+              ? DateTime.now().millisecondsSinceEpoch.toString()
+              : code,
           fullName: name,
         );
     setState(() => _employeeId = employee.id);
@@ -275,7 +285,9 @@ class _OperatorNewEntryScreenState extends ConsumerState<OperatorNewEntryScreen>
         .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
         .replaceAll(RegExp(r'^_|_$'), '');
     final workType = await ref.read(workTypesRepositoryProvider).saveReturning(
-          code: code.isEmpty ? DateTime.now().millisecondsSinceEpoch.toString() : code,
+          code: code.isEmpty
+              ? DateTime.now().millisecondsSinceEpoch.toString()
+              : code,
           name: name,
           unit: 'unit',
           category: 'quantity',
@@ -327,7 +339,9 @@ class _OperatorNewEntryScreenState extends ConsumerState<OperatorNewEntryScreen>
         .toLowerCase()
         .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
         .replaceAll(RegExp(r'^_|_$'), '');
-    return code.isEmpty ? DateTime.now().millisecondsSinceEpoch.toString() : code;
+    return code.isEmpty
+        ? DateTime.now().millisecondsSinceEpoch.toString()
+        : code;
   }
 
   Future<String?> _askText({

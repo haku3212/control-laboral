@@ -110,8 +110,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       labelText: 'Correo',
                       prefixIcon: Icon(Icons.mail_outline),
                     ),
-                    validator: (value) =>
-                        value == null || value.trim().isEmpty ? 'Requerido' : null,
+                    validator: (value) => value == null || value.trim().isEmpty
+                        ? 'Requerido'
+                        : null,
                   ),
                   const SizedBox(height: 16),
                   TextFormField(
@@ -122,7 +123,8 @@ class _LoginScreenState extends State<LoginScreen> {
                       prefixIcon: const Icon(Icons.lock_outline),
                       suffixIcon: IconButton(
                         tooltip: _obscure ? 'Mostrar' : 'Ocultar',
-                        icon: Icon(_obscure ? Icons.visibility : Icons.visibility_off),
+                        icon: Icon(
+                            _obscure ? Icons.visibility : Icons.visibility_off),
                         onPressed: () => setState(() => _obscure = !_obscure),
                       ),
                     ),

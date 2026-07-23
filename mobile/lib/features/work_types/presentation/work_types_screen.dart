@@ -42,7 +42,8 @@ class WorkTypesScreen extends ConsumerWidget {
                           : Icons.inventory_2_outlined,
                     ),
                     title: Text(item.name),
-                    subtitle: Text('${item.code} - ${item.unit} - ${item.category}'),
+                    subtitle:
+                        Text('${item.code} - ${item.unit} - ${item.category}'),
                     trailing: item.active
                         ? const Icon(Icons.check_circle_outline)
                         : const Icon(Icons.pause_circle_outline),
@@ -62,7 +63,8 @@ class WorkTypesScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _openForm(BuildContext context, WidgetRef ref, WorkType? item) async {
+  Future<void> _openForm(
+      BuildContext context, WidgetRef ref, WorkType? item) async {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -124,7 +126,9 @@ class _WorkTypeFormState extends ConsumerState<_WorkTypeForm> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                widget.item == null ? 'Crear tipo de trabajo' : 'Editar tipo de trabajo',
+                widget.item == null
+                    ? 'Crear tipo de trabajo'
+                    : 'Editar tipo de trabajo',
                 style: Theme.of(context).textTheme.titleLarge,
               ),
               const SizedBox(height: 16),

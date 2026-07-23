@@ -29,7 +29,8 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
                 labelText: 'Buscar trabajador',
                 prefixIcon: Icon(Icons.search),
               ),
-              onChanged: (value) => setState(() => _query = value.toLowerCase()),
+              onChanged: (value) =>
+                  setState(() => _query = value.toLowerCase()),
             ),
           ),
           Expanded(
@@ -156,7 +157,9 @@ class _EmployeeFormState extends ConsumerState<_EmployeeForm> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                widget.employee == null ? 'Crear trabajador' : 'Editar trabajador',
+                widget.employee == null
+                    ? 'Crear trabajador'
+                    : 'Editar trabajador',
                 style: Theme.of(context).textTheme.titleLarge,
               ),
               const SizedBox(height: 16),
