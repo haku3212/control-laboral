@@ -1,0 +1,57 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../../../core/supabase/supabase_providers.dart';
+import 'rate.dart';
+
+final ratesRepositoryProvider = Provider<RatesRepository>((ref) {
+  return RatesRepository(ref.watch(supabaseClientProvider));
+});
+
+final ratesProvider = FutureProvider<List<Rate>>((ref) {
+  return ref.watch(ratesRepositoryProvider).list();
+});
+
+class RatesRepository {
+  RatesRepository(this._client);
+
+  final SupabaseClient _client;
+  final _dateFormat = DateFormat('yyyy-MM-dd');
+
+  Future<List<Rate>> list() async {
+    final rows = await _client
+        .from('rates')
+        .select('*, work_types(name), employees(full_name)')
+        .order('active', ascending: false)
+        .order('valid_from', ascending: false);
+    return [for (final row in rows) Rate.fromMap(row)];
+  }
+
+  Future<void> save({
+    String? id,
+    required String workTypeId,
+    required String? employeeId,
+    required double unitPrice,
+    required DateTime validFrom,
+    required DateTime? validUntil,
+    required bool active,
+  }) async {
+    final userId = _client.auth.currentUser?.id;
+    final payload = {
+      'work_type_id': workTypeId,
+      'employee_id': employeeId,
+      'unit_price': unitPrice,
+      'valid_from': _dateFormat.format(validFrom),
+      'valid_until': validUntil == null ? null : _dateFormat.format(validUntil),
+      'active': active,
+      if (id == null && userId != null) 'created_by': userId,
+    };
+
+    if (id == null) {
+      await _client.from('rates').insert(payload);
+    } else {
+      await _client.from('rates').update(payload).eq('id', id);
+    }
+  }
+}
