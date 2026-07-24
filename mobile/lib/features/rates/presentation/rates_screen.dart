@@ -31,21 +31,29 @@ class RatesScreen extends ConsumerWidget {
               message: 'Crea tarifas generales o especiales por trabajador.',
             );
           }
+
           return RefreshIndicator(
-            onRefresh: () async => ref.invalidate(ratesProvider),
+            onRefresh: () async {
+              ref.invalidate(ratesProvider);
+              await ref.read(ratesProvider.future);
+            },
             child: ListView.separated(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
               itemCount: items.length,
               separatorBuilder: (_, __) => const SizedBox(height: 8),
               itemBuilder: (context, index) {
                 final rate = items[index];
+
                 return Card(
                   child: ListTile(
                     leading: const Icon(Icons.payments_outlined),
                     title: Text(
-                        '${rate.workTypeName} - ${money.format(rate.unitPrice)}'),
+                      '${rate.workTypeName} - '
+                      '${money.format(rate.unitPrice)}',
+                    ),
                     subtitle: Text(
-                      '${rate.employeeName ?? 'Tarifa general'}\nDesde ${date.format(rate.validFrom)}',
+                      '${rate.employeeName ?? 'Tarifa general'}\n'
+                      'Desde ${date.format(rate.validFrom)}',
                     ),
                     isThreeLine: true,
                     trailing: rate.active
@@ -68,13 +76,20 @@ class RatesScreen extends ConsumerWidget {
   }
 
   Future<void> _openForm(
-      BuildContext context, WidgetRef ref, Rate? rate) async {
-    await showModalBottomSheet<void>(
+    BuildContext context,
+    WidgetRef ref,
+    Rate? rate,
+  ) async {
+    final saved = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       builder: (_) => _RateForm(rate: rate),
     );
-    ref.invalidate(ratesProvider);
+
+    if (saved == true) {
+      ref.invalidate(ratesProvider);
+    }
   }
 }
 
@@ -89,7 +104,8 @@ class _RateForm extends ConsumerStatefulWidget {
 
 class _RateFormState extends ConsumerState<_RateForm> {
   final _formKey = GlobalKey<FormState>();
-  final _price = TextEditingController();
+  late final TextEditingController _price;
+
   String? _workTypeId;
   String? _employeeId;
   late DateTime _validFrom;
@@ -100,10 +116,14 @@ class _RateFormState extends ConsumerState<_RateForm> {
   @override
   void initState() {
     super.initState();
+
     final rate = widget.rate;
+
+    _price = TextEditingController(
+      text: rate == null ? '' : rate.unitPrice.toStringAsFixed(2),
+    );
     _workTypeId = rate?.workTypeId;
     _employeeId = rate?.employeeId;
-    _price.text = rate == null ? '' : rate.unitPrice.toStringAsFixed(2);
     _validFrom = rate?.validFrom ?? DateTime.now();
     _validUntil = rate?.validUntil;
     _active = rate?.active ?? true;
@@ -126,7 +146,7 @@ class _RateFormState extends ConsumerState<_RateForm> {
         left: 16,
         right: 16,
         top: 16,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+        bottom: MediaQuery.viewInsetsOf(context).bottom + 16,
       ),
       child: Form(
         key: _formKey,
@@ -155,11 +175,19 @@ class _RateFormState extends ConsumerState<_RateForm> {
                 controller: _price,
                 keyboardType:
                     const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(labelText: 'Precio unitario'),
+                decoration: const InputDecoration(
+                  labelText: 'Precio unitario',
+                  prefixIcon: Icon(Icons.attach_money),
+                ),
                 validator: (value) {
-                  final parsed =
-                      double.tryParse(value?.replaceAll(',', '.') ?? '');
-                  if (parsed == null || parsed < 0) return 'Monto invalido';
+                  final parsed = double.tryParse(
+                    value?.trim().replaceAll(',', '.') ?? '',
+                  );
+
+                  if (parsed == null || parsed < 0) {
+                    return 'Monto inválido';
+                  }
+
                   return null;
                 },
               ),
@@ -169,27 +197,39 @@ class _RateFormState extends ConsumerState<_RateForm> {
                 title: const Text('Vigente desde'),
                 subtitle: Text(date.format(_validFrom)),
                 trailing: const Icon(Icons.calendar_month_outlined),
-                onTap: () => _pickDate(true),
+                onTap: _saving ? null : () => _pickDate(true),
               ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Vigente hasta'),
-                subtitle: Text(_validUntil == null
-                    ? 'Sin fin'
-                    : date.format(_validUntil!)),
+                subtitle: Text(
+                  _validUntil == null
+                      ? 'Sin fin'
+                      : date.format(_validUntil!),
+                ),
                 trailing: const Icon(Icons.event_busy_outlined),
-                onTap: () => _pickDate(false),
+                onTap: _saving ? null : () => _pickDate(false),
               ),
               SwitchListTile(
                 value: _active,
                 title: const Text('Activa'),
-                onChanged: (value) => setState(() => _active = value),
+                onChanged: _saving
+                    ? null
+                    : (value) => setState(() => _active = value),
               ),
               const SizedBox(height: 16),
-              FilledButton.icon(
-                onPressed: _saving ? null : _save,
-                icon: const Icon(Icons.save_outlined),
-                label: const Text('Guardar'),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: _saving ? null : _save,
+                  icon: _saving
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.save_outlined),
+                  label: Text(_saving ? 'Guardando...' : 'Guardar'),
+                ),
               ),
             ],
           ),
@@ -199,43 +239,79 @@ class _RateFormState extends ConsumerState<_RateForm> {
   }
 
   Widget _workTypeDropdown(List<WorkType> items) {
+    final activeItems = items.where((item) => item.active).toList();
+
     return DropdownButtonFormField<String>(
       value: _workTypeId,
-      decoration: const InputDecoration(labelText: 'Tipo de trabajo'),
+      isExpanded: true,
+      decoration: const InputDecoration(
+        labelText: 'Tipo de trabajo',
+      ),
       items: [
-        for (final item in items)
-          DropdownMenuItem(value: item.id, child: Text(item.name)),
+        for (final item in activeItems)
+          DropdownMenuItem(
+            value: item.id,
+            child: Text(
+              item.name,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
       ],
       validator: (value) => value == null ? 'Requerido' : null,
-      onChanged: (value) => setState(() => _workTypeId = value),
+      onChanged: _saving
+          ? null
+          : (value) => setState(() => _workTypeId = value),
     );
   }
 
   Widget _employeeDropdown(List<Employee> items) {
+    final activeItems = items.where((item) => item.active).toList();
+
     return DropdownButtonFormField<String?>(
       value: _employeeId,
-      decoration: const InputDecoration(labelText: 'Trabajador'),
+      isExpanded: true,
+      decoration: const InputDecoration(
+        labelText: 'Trabajador',
+      ),
       items: [
-        const DropdownMenuItem(value: null, child: Text('Tarifa general')),
-        for (final item in items)
-          DropdownMenuItem(value: item.id, child: Text(item.fullName)),
+        const DropdownMenuItem<String?>(
+          value: null,
+          child: Text('Tarifa general'),
+        ),
+        for (final item in activeItems)
+          DropdownMenuItem<String?>(
+            value: item.id,
+            child: Text(
+              item.fullName,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
       ],
-      onChanged: (value) => setState(() => _employeeId = value),
+      onChanged: _saving
+          ? null
+          : (value) => setState(() => _employeeId = value),
     );
   }
 
   Future<void> _pickDate(bool from) async {
     final initial = from ? _validFrom : (_validUntil ?? _validFrom);
+
     final picked = await showDatePicker(
       context: context,
       firstDate: DateTime(2020),
       lastDate: DateTime(2100),
       initialDate: initial,
     );
-    if (picked == null) return;
+
+    if (!mounted || picked == null) return;
+
     setState(() {
       if (from) {
         _validFrom = picked;
+
+        if (_validUntil != null && _validUntil!.isBefore(_validFrom)) {
+          _validUntil = null;
+        }
       } else {
         _validUntil = picked;
       }
@@ -243,45 +319,73 @@ class _RateFormState extends ConsumerState<_RateForm> {
   }
 
   Future<void> _save() async {
+    FocusManager.instance.primaryFocus?.unfocus();
+
     if (!_formKey.currentState!.validate()) return;
+
+    if (_validUntil != null && _validUntil!.isBefore(_validFrom)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'La fecha final no puede ser anterior a la fecha inicial.',
+          ),
+        ),
+      );
+      return;
+    }
+
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Confirmar tarifa'),
-        content: const Text('Los cambios de tarifa afectan calculos futuros.'),
+        content: const Text(
+          'Los cambios de tarifa afectan cálculos futuros.',
+        ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
+            onPressed: () => Navigator.of(dialogContext).pop(false),
             child: const Text('Cancelar'),
           ),
           FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
             child: const Text('Guardar'),
           ),
         ],
       ),
     );
-    if (confirmed != true) return;
+
+    if (!mounted || confirmed != true) return;
 
     setState(() => _saving = true);
+
     try {
       await ref.read(ratesRepositoryProvider).save(
             id: widget.rate?.id,
             workTypeId: _workTypeId!,
             employeeId: _employeeId,
-            unitPrice: double.parse(_price.text.replaceAll(',', '.')),
+            unitPrice: double.parse(
+              _price.text.trim().replaceAll(',', '.'),
+            ),
             validFrom: _validFrom,
             validUntil: _validUntil,
             active: _active,
           );
-      if (mounted) Navigator.of(context).pop();
+
+      if (!mounted) return;
+
+      // Devuelve true a la pantalla principal para que actualice las tarifas.
+      // No se llama setState después de cerrar el bottom sheet.
+      Navigator.of(context).pop(true);
     } catch (error) {
       if (!mounted) return;
+
+      setState(() => _saving = false);
+
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudo guardar: $error')),
+        SnackBar(
+          content: Text('No se pudo guardar: $error'),
+        ),
       );
-    } finally {
-      if (mounted) setState(() => _saving = false);
     }
   }
 }

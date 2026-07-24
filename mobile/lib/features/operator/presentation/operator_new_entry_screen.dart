@@ -25,7 +25,6 @@ class _OperatorNewEntryScreenState
   final _restMinutes = TextEditingController(text: '0');
   final _overtime = TextEditingController(text: '0');
   final _note = TextEditingController();
-  final _newEmployee = TextEditingController();
   final _newWorkType = TextEditingController();
   final _inlineEmployee = TextEditingController();
   final _inlineWorkType = TextEditingController();
@@ -43,7 +42,6 @@ class _OperatorNewEntryScreenState
     _restMinutes.dispose();
     _overtime.dispose();
     _note.dispose();
-    _newEmployee.dispose();
     _newWorkType.dispose();
     _inlineEmployee.dispose();
     _inlineWorkType.dispose();
@@ -308,9 +306,8 @@ class _OperatorNewEntryScreenState
       lastDate: DateTime.now().add(const Duration(days: 7)),
       initialDate: _workDate,
     );
-    if (picked != null) {
-      setState(() => _workDate = picked);
-    }
+    if (!mounted || picked == null) return;
+    setState(() => _workDate = picked);
   }
 
   Future<void> _pickTime({required bool isStart}) async {
@@ -320,7 +317,7 @@ class _OperatorNewEntryScreenState
           ? (_startTime ?? TimeOfDay.now())
           : (_endTime ?? TimeOfDay.now()),
     );
-    if (picked == null) return;
+    if (!mounted || picked == null) return;
     setState(() {
       if (isStart) {
         _startTime = picked;
@@ -396,24 +393,49 @@ class _OperatorNewEntryScreenState
   }
 
   Future<void> _createEmployee() async {
-    final name = await _askText(
-      title: 'Agregar trabajador',
-      label: 'Nombre del trabajador',
-      controller: _newEmployee,
+    final draft = await _showEmployeeDialog();
+    if (draft == null) return;
+
+    try {
+      final employee =
+          await ref.read(employeesRepositoryProvider).saveReturning(
+                code: draft.code,
+                fullName: draft.fullName,
+                documentNumber: draft.documentNumber,
+                phone: draft.phone,
+                jobTitle: draft.jobTitle,
+                active: true,
+              );
+
+      if (!mounted) return;
+
+      setState(() {
+        _employeeId = employee.id;
+        _inlineEmployee.clear();
+      });
+
+      ref.invalidate(employeesProvider);
+      await ref.read(employeesProvider.future);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${employee.fullName} fue agregado y seleccionado.'),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo crear el trabajador: $error')),
+      );
+    }
+  }
+
+  Future<_EmployeeDraft?> _showEmployeeDialog() {
+    return showDialog<_EmployeeDraft>(
+      context: context,
+      builder: (_) => const _EmployeeDialog(),
     );
-    if (name == null) return;
-    final code = name
-        .toLowerCase()
-        .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
-        .replaceAll(RegExp(r'^_|_$'), '');
-    final employee = await ref.read(employeesRepositoryProvider).saveReturning(
-          code: code.isEmpty
-              ? DateTime.now().millisecondsSinceEpoch.toString()
-              : code,
-          fullName: name,
-        );
-    setState(() => _employeeId = employee.id);
-    ref.invalidate(employeesProvider);
   }
 
   Future<void> _createWorkType() async {
@@ -422,22 +444,45 @@ class _OperatorNewEntryScreenState
       label: 'Nombre del trabajo',
       controller: _newWorkType,
     );
+
     if (name == null) return;
-    final code = name
-        .toLowerCase()
-        .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
-        .replaceAll(RegExp(r'^_|_$'), '');
-    final workType = await ref.read(workTypesRepositoryProvider).saveReturning(
-          code: code.isEmpty
-              ? DateTime.now().millisecondsSinceEpoch.toString()
-              : code,
-          name: name,
-          unit: 'unit',
-          category: 'quantity',
-          active: true,
-        );
-    setState(() => _workTypeId = workType.id);
-    ref.invalidate(workTypesProvider);
+
+    try {
+      final code = name
+          .toLowerCase()
+          .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
+          .replaceAll(RegExp(r'^_|_$'), '');
+
+      final workType =
+          await ref.read(workTypesRepositoryProvider).saveReturning(
+                code: code.isEmpty
+                    ? DateTime.now().millisecondsSinceEpoch.toString()
+                    : code,
+                name: name,
+                unit: 'unit',
+                category: 'quantity',
+                active: true,
+              );
+
+      if (!mounted) return;
+
+      setState(() => _workTypeId = workType.id);
+      ref.invalidate(workTypesProvider);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${workType.name} fue agregado y seleccionado.'),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('No se pudo crear el tipo de trabajo: $error'),
+        ),
+      );
+    }
   }
 
   Future<String?> _resolveEmployeeId() async {
@@ -534,4 +579,164 @@ class _OperatorNewEntryScreenState
       ),
     );
   }
+}
+
+
+class _EmployeeDialog extends StatefulWidget {
+  const _EmployeeDialog();
+
+  @override
+  State<_EmployeeDialog> createState() => _EmployeeDialogState();
+}
+
+class _EmployeeDialogState extends State<_EmployeeDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _nameController = TextEditingController();
+  final _documentController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _jobTitleController = TextEditingController();
+  final _codeController = TextEditingController();
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _documentController.dispose();
+    _phoneController.dispose();
+    _jobTitleController.dispose();
+    _codeController.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    if (!_formKey.currentState!.validate()) return;
+
+    final fullName = _nameController.text.trim();
+    final customCode = _codeController.text.trim();
+
+    Navigator.of(context).pop(
+      _EmployeeDraft(
+        fullName: fullName,
+        code: customCode.isEmpty ? _codeFromName(fullName) : customCode,
+        documentNumber: _documentController.text.trim(),
+        phone: _phoneController.text.trim(),
+        jobTitle: _jobTitleController.text.trim(),
+      ),
+    );
+  }
+
+  String _codeFromName(String name) {
+    final code = name
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
+        .replaceAll(RegExp(r'^_|_$'), '');
+
+    return code.isEmpty
+        ? DateTime.now().millisecondsSinceEpoch.toString()
+        : code;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Row(
+        children: [
+          Icon(Icons.person_add_alt),
+          SizedBox(width: 10),
+          Expanded(child: Text('Agregar trabajador')),
+        ],
+      ),
+      content: SizedBox(
+        width: 440,
+        child: Form(
+          key: _formKey,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: _nameController,
+                  autofocus: true,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(
+                    labelText: 'Nombre completo',
+                    prefixIcon: Icon(Icons.person_outline),
+                  ),
+                  validator: (value) =>
+                      value == null || value.trim().isEmpty
+                          ? 'Ingresa el nombre completo'
+                          : null,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _documentController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'CI',
+                    prefixIcon: Icon(Icons.credit_card_outlined),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _phoneController,
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(
+                    labelText: 'Teléfono',
+                    prefixIcon: Icon(Icons.phone_outlined),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _jobTitleController,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(
+                    labelText: 'Cargo',
+                    prefixIcon: Icon(Icons.work_outline),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _codeController,
+                  textCapitalization: TextCapitalization.characters,
+                  decoration: const InputDecoration(
+                    labelText: 'Código',
+                    hintText: 'Opcional: se genera desde el nombre',
+                    prefixIcon: Icon(Icons.badge_outlined),
+                  ),
+                  textInputAction: TextInputAction.done,
+                  onFieldSubmitted: (_) => _submit(),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton.icon(
+          onPressed: _submit,
+          icon: const Icon(Icons.save_outlined),
+          label: const Text('Guardar'),
+        ),
+      ],
+    );
+  }
+}
+
+class _EmployeeDraft {
+  const _EmployeeDraft({
+    required this.fullName,
+    required this.code,
+    required this.documentNumber,
+    required this.phone,
+    required this.jobTitle,
+  });
+
+  final String fullName;
+  final String code;
+  final String documentNumber;
+  final String phone;
+  final String jobTitle;
 }

@@ -32,21 +32,41 @@ class PayrollScreen extends ConsumerWidget {
 
         final gross = items.fold(0.0, (sum, item) => sum + item.grossPayable);
         final total = items.fold(0.0, (sum, item) => sum + item.totalPayable);
+
         return RefreshIndicator(
           onRefresh: () async => ref.invalidate(payrollSummariesProvider),
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              Text('Pagos estimados',
-                  style: Theme.of(context).textTheme.titleLarge),
+              Text(
+                'Pagos estimados',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
               const SizedBox(height: 6),
               Text('Total trabajo: ${money.format(gross)}'),
               Text('A pagar: ${money.format(total)}'),
               const SizedBox(height: 12),
               OutlinedButton.icon(
                 onPressed: () async {
-                  await ref.read(payrollRepositoryProvider).closeCurrentWeek();
-                  ref.invalidate(payrollSummariesProvider);
+                  try {
+                    await ref.read(payrollRepositoryProvider).closeCurrentWeek();
+                    ref.invalidate(payrollSummariesProvider);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Semana cerrada correctamente.'),
+                        ),
+                      );
+                    }
+                  } catch (error) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('No se pudo cerrar la semana: $error'),
+                        ),
+                      );
+                    }
+                  }
                 },
                 icon: const Icon(Icons.lock_outline),
                 label: const Text('Cerrar semana'),
@@ -89,7 +109,7 @@ class _EmployeePayrollCard extends ConsumerWidget {
                       summary.employeeName,
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
-                    const Text('Se pago'),
+                    const Text('Se pagó'),
                   ],
                 ),
               ),
@@ -99,10 +119,27 @@ class _EmployeePayrollCard extends ConsumerWidget {
                   Text(money.format(summary.totalPayable)),
                   TextButton(
                     onPressed: () async {
-                      await ref
-                          .read(payrollRepositoryProvider)
-                          .setPaid(summary.employeeId, false);
-                      ref.invalidate(payrollSummariesProvider);
+                      try {
+                        await ref
+                            .read(payrollRepositoryProvider)
+                            .setPaid(summary.employeeId, false);
+                        ref.invalidate(payrollSummariesProvider);
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Pago reabierto correctamente.'),
+                            ),
+                          );
+                        }
+                      } catch (error) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('No se pudo reabrir el pago: $error'),
+                            ),
+                          );
+                        }
+                      }
                     },
                     child: const Text('Reabrir'),
                   ),
@@ -132,7 +169,7 @@ class _EmployeePayrollCard extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(money.format(summary.totalPayable)),
-                    Text(summary.isPaid ? 'Pagado' : 'Pendiente'),
+                    const Text('Pendiente'),
                   ],
                 ),
               ],
@@ -150,8 +187,10 @@ class _EmployeePayrollCard extends ConsumerWidget {
                 child: _PayrollLineTile(line: line, money: money),
               ),
             const Divider(height: 22),
-            Text('Bonos, anticipos y descuentos',
-                style: Theme.of(context).textTheme.titleSmall),
+            Text(
+              'Bonos, anticipos y descuentos',
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
             const SizedBox(height: 8),
             if (summary.adjustments.isEmpty)
               const Text('Sin ajustes.')
@@ -165,19 +204,35 @@ class _EmployeePayrollCard extends ConsumerWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        '${adjustment.type == 'bonus' ? '+' : '-'} ${money.format(adjustment.amount)}',
+                        '${adjustment.type == 'bonus' ? '+' : '-'} '
+                        '${money.format(adjustment.amount)}',
                       ),
                       IconButton(
                         tooltip: 'Quitar',
                         icon: const Icon(Icons.delete_outline),
-                        onPressed: summary.isPaid
-                            ? null
-                            : () async {
-                                await ref
-                                    .read(payrollRepositoryProvider)
-                                    .deleteAdjustment(adjustment.id);
-                                ref.invalidate(payrollSummariesProvider);
-                              },
+                        onPressed: () async {
+                          try {
+                            await ref
+                                .read(payrollRepositoryProvider)
+                                .deleteAdjustment(adjustment.id);
+                            ref.invalidate(payrollSummariesProvider);
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Ajuste eliminado correctamente.'),
+                                ),
+                              );
+                            }
+                          } catch (error) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('No se pudo eliminar el ajuste: $error'),
+                                ),
+                              );
+                            }
+                          }
+                        },
                       ),
                     ],
                   ),
@@ -188,22 +243,15 @@ class _EmployeePayrollCard extends ConsumerWidget {
               runSpacing: 8,
               children: [
                 OutlinedButton(
-                  onPressed: summary.isPaid
-                      ? null
-                      : () => _addAdjustment(context, ref, summary, 'bonus'),
+                  onPressed: () => _addAdjustment(context, ref, summary, 'bonus'),
                   child: const Text('Bono'),
                 ),
                 OutlinedButton(
-                  onPressed: summary.isPaid
-                      ? null
-                      : () => _addAdjustment(context, ref, summary, 'advance'),
+                  onPressed: () => _addAdjustment(context, ref, summary, 'advance'),
                   child: const Text('Anticipo'),
                 ),
                 OutlinedButton(
-                  onPressed: summary.isPaid
-                      ? null
-                      : () =>
-                          _addAdjustment(context, ref, summary, 'deduction'),
+                  onPressed: () => _addAdjustment(context, ref, summary, 'deduction'),
                   child: const Text('Descuento'),
                 ),
               ],
@@ -214,10 +262,27 @@ class _EmployeePayrollCard extends ConsumerWidget {
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: () async {
-                      await ref
-                          .read(payrollRepositoryProvider)
-                          .setPaid(summary.employeeId, false);
-                      ref.invalidate(payrollSummariesProvider);
+                      try {
+                        await ref
+                            .read(payrollRepositoryProvider)
+                            .setPaid(summary.employeeId, false);
+                        ref.invalidate(payrollSummariesProvider);
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Pago reabierto correctamente.'),
+                            ),
+                          );
+                        }
+                      } catch (error) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('No se pudo reabrir el pago: $error'),
+                            ),
+                          );
+                        }
+                      }
                     },
                     icon: const Icon(Icons.lock_open_outlined),
                     label: const Text('Reabrir'),
@@ -229,10 +294,27 @@ class _EmployeePayrollCard extends ConsumerWidget {
                     onPressed: () async {
                       final confirmed = await _confirmPayment(context);
                       if (!confirmed) return;
-                      await ref
-                          .read(payrollRepositoryProvider)
-                          .setPaid(summary.employeeId, true);
-                      ref.invalidate(payrollSummariesProvider);
+                      try {
+                        await ref
+                            .read(payrollRepositoryProvider)
+                            .setPaid(summary.employeeId, true);
+                        ref.invalidate(payrollSummariesProvider);
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Pago marcado como pagado.'),
+                            ),
+                          );
+                        }
+                      } catch (error) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('No se pudo registrar el pago: $error'),
+                            ),
+                          );
+                        }
+                      }
                     },
                     icon: const Icon(Icons.check_circle_outline),
                     label: const Text('Pagado'),
@@ -261,56 +343,33 @@ class _EmployeePayrollCard extends ConsumerWidget {
     EmployeePayrollSummary summary,
     String type,
   ) async {
-    final amountController = TextEditingController();
-    final conceptController = TextEditingController();
-    final saved = await showDialog<bool>(
+    final result = await showDialog<_AdjustmentDialogResult>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(_adjustmentLabel(type)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: amountController,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(
-                labelText: 'Monto',
-                prefixText: 'Bs ',
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: conceptController,
-              decoration: const InputDecoration(labelText: 'Concepto'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Guardar'),
-          ),
-        ],
-      ),
+      builder: (_) => _AdjustmentDialog(title: _adjustmentLabel(type)),
     );
-    final amount = double.tryParse(amountController.text.replaceAll(',', '.'));
-    final concept = conceptController.text;
-    amountController.dispose();
-    conceptController.dispose();
-    if (saved != true || amount == null || amount <= 0) return;
 
-    await ref.read(payrollRepositoryProvider).addAdjustment(
-          employeeId: summary.employeeId,
-          type: type,
-          concept: concept,
-          amount: amount,
+    if (result == null) return;
+
+    try {
+      await ref.read(payrollRepositoryProvider).addAdjustment(
+            employeeId: summary.employeeId,
+            type: type,
+            concept: result.concept,
+            amount: result.amount,
+          );
+      ref.invalidate(payrollSummariesProvider);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Ajuste agregado correctamente.')),
         );
-    ref.invalidate(payrollSummariesProvider);
+      }
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se pudo agregar el ajuste: $error')),
+        );
+      }
+    }
   }
 
   Future<bool> _confirmPayment(BuildContext context) async {
@@ -319,7 +378,8 @@ class _EmployeePayrollCard extends ConsumerWidget {
           builder: (context) => AlertDialog(
             title: const Text('Confirmar pago'),
             content: Text(
-              'Se marcara como pagado ${money.format(summary.totalPayable)} para ${summary.employeeName}.',
+              'Se marcará como pagado ${money.format(summary.totalPayable)} '
+              'para ${summary.employeeName}.',
             ),
             actions: [
               TextButton(
@@ -381,47 +441,191 @@ class _PayrollLineTile extends ConsumerWidget {
   }
 
   Future<void> _assignRate(BuildContext context, WidgetRef ref) async {
-    final controller = TextEditingController();
     final value = await showDialog<double>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Asignar precio'),
-        content: TextField(
-          controller: controller,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: InputDecoration(
-            labelText: 'Precio para ${line.workTypeName}',
-            prefixText: 'Bs ',
-          ),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final parsed =
-                  double.tryParse(controller.text.replaceAll(',', '.'));
-              Navigator.of(context).pop(parsed);
-            },
-            child: const Text('Guardar'),
-          ),
-        ],
-      ),
+      builder: (_) => _AssignRateDialog(workTypeName: line.workTypeName),
     );
-    controller.dispose();
+
     if (value == null || value < 0) return;
 
-    await ref.read(ratesRepositoryProvider).save(
-          workTypeId: line.workTypeId,
-          employeeId: null,
-          unitPrice: value,
-          validFrom: DateTime.now(),
-          validUntil: null,
-          active: true,
+    try {
+      await ref.read(ratesRepositoryProvider).save(
+            workTypeId: line.workTypeId,
+            employeeId: null,
+            unitPrice: value,
+            validFrom: DateTime.now(),
+            validUntil: null,
+            active: true,
+          );
+      ref.invalidate(payrollSummariesProvider);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Precio asignado correctamente.')),
         );
-    ref.invalidate(payrollSummariesProvider);
+      }
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se pudo guardar el precio: $error')),
+        );
+      }
+    }
+  }
+}
+
+class _AdjustmentDialogResult {
+  const _AdjustmentDialogResult({
+    required this.amount,
+    required this.concept,
+  });
+
+  final double amount;
+  final String concept;
+}
+
+class _AdjustmentDialog extends StatefulWidget {
+  const _AdjustmentDialog({required this.title});
+
+  final String title;
+
+  @override
+  State<_AdjustmentDialog> createState() => _AdjustmentDialogState();
+}
+
+class _AdjustmentDialogState extends State<_AdjustmentDialog> {
+  final TextEditingController _amountController = TextEditingController();
+  final TextEditingController _conceptController = TextEditingController();
+
+  @override
+  void dispose() {
+    _amountController.dispose();
+    _conceptController.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    final amount = double.tryParse(
+      _amountController.text.trim().replaceAll(',', '.'),
+    );
+    final concept = _conceptController.text.trim();
+
+    if (amount == null || amount <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ingresa un monto mayor que cero.')),
+      );
+      return;
+    }
+
+    if (concept.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ingresa el concepto del ajuste.')),
+      );
+      return;
+    }
+
+    Navigator.of(context).pop(
+      _AdjustmentDialogResult(amount: amount, concept: concept),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.title),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _amountController,
+              autofocus: true,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'Monto',
+                prefixText: 'Bs ',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _conceptController,
+              decoration: const InputDecoration(labelText: 'Concepto'),
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => _save(),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: _save,
+          child: const Text('Guardar'),
+        ),
+      ],
+    );
+  }
+}
+
+class _AssignRateDialog extends StatefulWidget {
+  const _AssignRateDialog({required this.workTypeName});
+
+  final String workTypeName;
+
+  @override
+  State<_AssignRateDialog> createState() => _AssignRateDialogState();
+}
+
+class _AssignRateDialogState extends State<_AssignRateDialog> {
+  final TextEditingController _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    final value = double.tryParse(
+      _controller.text.trim().replaceAll(',', '.'),
+    );
+
+    if (value == null || value < 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ingresa un precio válido.')),
+      );
+      return;
+    }
+
+    Navigator.of(context).pop(value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Asignar precio'),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        decoration: InputDecoration(
+          labelText: 'Precio para ${widget.workTypeName}',
+          prefixText: 'Bs ',
+        ),
+        onSubmitted: (_) => _save(),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: _save,
+          child: const Text('Guardar'),
+        ),
+      ],
+    );
   }
 }
