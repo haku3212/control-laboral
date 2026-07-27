@@ -42,7 +42,7 @@ class PayrollScreen extends ConsumerWidget {
         return RefreshIndicator(
           onRefresh: () async => ref.invalidate(payrollSummariesProvider),
           child: ListView(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
             children: [
               Text(
                 'Pagos pendientes',
@@ -517,32 +517,89 @@ class _PayrollLineTile extends ConsumerWidget {
         ? line.quantity.toStringAsFixed(0)
         : line.quantity.toStringAsFixed(2);
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(line.workTypeName),
-              Text('$quantity ${_unitLabel(line.unit)}'),
-              Text(
-                line.rate == null
-                    ? 'Sin precio'
-                    : '${money.format(line.rate)} x unidad',
-              ),
-            ],
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: colorScheme.outlineVariant),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: colorScheme.primaryContainer,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              _iconForUnit(line.unit),
+              color: colorScheme.onPrimaryContainer,
+              size: 20,
+            ),
           ),
-        ),
-        if (line.rate == null)
-          OutlinedButton(
-            onPressed: () => _assignRate(context, ref),
-            child: const Text('Asignar'),
-          )
-        else
-          Text(money.format(line.subtotal!)),
-      ],
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  line.workTypeName,
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                ),
+                const SizedBox(height: 2),
+                Text('$quantity ${_unitLabel(line.unit)}'),
+                Text(
+                  line.rate == null
+                      ? 'Sin precio asignado'
+                      : '${money.format(line.rate)} x unidad',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: line.rate == null
+                            ? colorScheme.error
+                            : colorScheme.onSurfaceVariant,
+                      ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          if (line.rate == null)
+            OutlinedButton(
+              onPressed: () => _assignRate(context, ref),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(0, 42),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: const Text('Asignar'),
+            )
+          else
+            Text(
+              money.format(line.subtotal!),
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+            ),
+        ],
+      ),
     );
+  }
+
+  IconData _iconForUnit(String unit) {
+    return switch (unit) {
+      'hour' => Icons.schedule_outlined,
+      'bag' => Icons.shopping_bag_outlined,
+      'bucket' => Icons.inventory_2_outlined,
+      'tray' => Icons.table_bar_outlined,
+      _ => Icons.work_outline,
+    };
   }
 
   Future<void> _assignRate(BuildContext context, WidgetRef ref) async {

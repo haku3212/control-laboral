@@ -253,6 +253,8 @@ class _OperatorNewEntryScreenState
             ),
           ),
           const SizedBox(height: 16),
+          const _SubmitFlowHint(),
+          const SizedBox(height: 10),
           Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -603,6 +605,39 @@ class _OperatorNewEntryScreenState
       'tray' => 'bandeja',
       _ => unit,
     };
+  }
+}
+
+class _SubmitFlowHint extends StatelessWidget {
+  const _SubmitFlowHint();
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: colorScheme.primary.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: colorScheme.primary.withValues(alpha: 0.18)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.playlist_add_check, color: colorScheme.primary),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Para una misma persona puedes enviar un trabajo y seguir agregando otros de la misma fecha.',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurface,
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

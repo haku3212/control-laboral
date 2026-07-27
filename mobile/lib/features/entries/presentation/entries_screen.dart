@@ -184,7 +184,7 @@ class _EntryCard extends StatelessWidget {
     return Card(
       clipBehavior: Clip.antiAlias,
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -216,7 +216,7 @@ class _EntryCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                _StatusChip(status: item.status),
+                Flexible(child: _StatusChip(status: item.status)),
               ],
             ),
             const SizedBox(height: 12),
@@ -237,29 +237,53 @@ class _EntryCard extends StatelessWidget {
             ],
             if (onApprove != null || onReject != null || onEdit != null) ...[
               const Divider(height: 22),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
+              Row(
                 children: [
-                  if (onReject != null)
-                    OutlinedButton.icon(
-                      onPressed: onReject,
-                      icon: const Icon(Icons.block),
-                      label: const Text('Rechazar'),
-                    ),
-                  if (onApprove != null)
-                    FilledButton.icon(
-                      onPressed: onApprove,
-                      icon: const Icon(Icons.check),
-                      label: const Text('Aprobar'),
-                    ),
                   if (onEdit != null)
-                    TextButton.icon(
+                    IconButton.filledTonal(
+                      tooltip: 'Editar',
                       onPressed: onEdit,
                       icon: const Icon(Icons.edit_outlined),
-                      label: const Text('Editar'),
+                    ),
+                  if (onEdit != null) const SizedBox(width: 8),
+                  if (onReject != null)
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: onReject,
+                        icon: const Icon(Icons.block, size: 18),
+                        label: const Text('Rechazar'),
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size(0, 44),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ),
+                    ),
+                  if (onReject != null && onApprove != null)
+                    const SizedBox(width: 8),
+                  if (onApprove != null)
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: onApprove,
+                        icon: const Icon(Icons.check, size: 18),
+                        label: const Text('Aprobar'),
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size(0, 44),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ),
                     ),
                 ],
+              ),
+              const SizedBox(height: 2),
+              Text(
+                'Revisa trabajador, trabajo y cantidad antes de aprobar.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
               ),
             ],
           ],
@@ -299,18 +323,21 @@ class _InfoPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        color: colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: colorScheme.outlineVariant),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 16),
+          Icon(icon, size: 16, color: colorScheme.primary),
           const SizedBox(width: 6),
-          Text(text),
+          Text(text, style: Theme.of(context).textTheme.bodyMedium),
         ],
       ),
     );
