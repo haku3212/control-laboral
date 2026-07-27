@@ -46,12 +46,8 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
                       (employee.documentNumber ?? '')
                           .toLowerCase()
                           .contains(_query) ||
-                      (employee.phone ?? '')
-                          .toLowerCase()
-                          .contains(_query) ||
-                      (employee.jobTitle ?? '')
-                          .toLowerCase()
-                          .contains(_query);
+                      (employee.phone ?? '').toLowerCase().contains(_query) ||
+                      (employee.jobTitle ?? '').toLowerCase().contains(_query);
                 }).toList();
 
                 if (filtered.isEmpty) {

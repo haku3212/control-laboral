@@ -63,7 +63,7 @@ class RatesRepository {
 
   Future<String> _empresaId() async {
     final userId = _client.auth.currentUser?.id;
-    if (userId == null) throw StateError('Sesion no iniciada.');
+    if (userId == null) throw StateError('Sesión no iniciada.');
     final row = await _client
         .from('profiles')
         .select('empresa_id')

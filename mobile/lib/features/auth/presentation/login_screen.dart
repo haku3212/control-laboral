@@ -5,6 +5,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/auth/profile_provider.dart';
 import '../../../core/config/app_config.dart';
+import '../../../shared/widgets/brand_mark.dart';
+import '../../../shared/widgets/support_footer.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -34,8 +36,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     setState(() => _loading = true);
 
     try {
-      final response =
-          await Supabase.instance.client.auth.signInWithPassword(
+      final response = await Supabase.instance.client.auth.signInWithPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text,
       );
@@ -75,9 +76,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Revisa tu correo para continuar.'),
-        ),
+        const SnackBar(content: Text('Revisa tu correo para continuar.')),
       );
     } on AuthException catch (error) {
       _showError(error.message);
@@ -107,11 +106,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Icon(
-                    Icons.engineering_outlined,
-                    size: 72,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
+                  const BrandMark(),
                   const SizedBox(height: 16),
                   Text(
                     'Control Laboral',
@@ -161,9 +156,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       suffixIcon: IconButton(
                         tooltip: _obscure ? 'Mostrar' : 'Ocultar',
                         icon: Icon(
-                          _obscure
-                              ? Icons.visibility
-                              : Icons.visibility_off,
+                          _obscure ? Icons.visibility : Icons.visibility_off,
                         ),
                         onPressed: () {
                           setState(() => _obscure = !_obscure);
@@ -185,9 +178,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         ? const SizedBox(
                             height: 18,
                             width: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                            ),
+                            child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Icon(Icons.login),
                     label: const Text('Iniciar sesión'),
@@ -196,6 +187,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     onPressed: _loading ? null : _resetPassword,
                     child: const Text('Recuperar contraseña'),
                   ),
+                  const SupportFooter(),
                 ],
               ),
             ),

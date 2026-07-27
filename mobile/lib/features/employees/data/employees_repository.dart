@@ -117,7 +117,7 @@ class EmployeesRepository {
     final userId = _client.auth.currentUser?.id;
 
     if (userId == null) {
-      throw StateError('Sesion no iniciada.');
+      throw StateError('Sesión no iniciada.');
     }
 
     final row = await _client

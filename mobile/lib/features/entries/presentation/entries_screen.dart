@@ -32,87 +32,24 @@ class EntriesScreen extends ConsumerWidget {
             await ref.read(workEntriesProvider.future);
           },
           child: ListView.separated(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
             itemCount: items.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 8),
+            separatorBuilder: (_, __) => const SizedBox(height: 10),
             itemBuilder: (context, index) {
               final item = items[index];
-
-              return Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              item.employeeName,
-                              style: Theme.of(context).textTheme.titleMedium,
-                            ),
-                          ),
-                          Chip(
-                            label: Text(_statusLabel(item.status)),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '${dateFormat.format(item.workDate)} - '
-                        '${item.workTypeName} - '
-                        '${_formatQuantity(item.quantity)} ${item.unit}',
-                      ),
-                      if (item.note != null &&
-                          item.note!.trim().isNotEmpty) ...[
-                        const SizedBox(height: 4),
-                        Text(item.note!),
-                      ],
-                      if (item.status == 'draft' ||
-                          item.status == 'pending') ...[
-                        const SizedBox(height: 10),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: () async {
-                                  await _reject(context, ref, item.id);
-                                },
-                                icon: const Icon(Icons.block),
-                                label: const Text('Rechazar'),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: FilledButton.icon(
-                                onPressed: () async {
-                                  await _setStatus(
-                                    context,
-                                    ref,
-                                    item.id,
-                                    'confirmed',
-                                  );
-                                },
-                                icon: const Icon(Icons.check),
-                                label: const Text('Aprobar'),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                      if (item.status != 'void') ...[
-                        const SizedBox(height: 8),
-                        OutlinedButton.icon(
-                          onPressed: () async {
-                            await _editEntry(context, ref, item);
-                          },
-                          icon: const Icon(Icons.edit_outlined),
-                          label: const Text('Editar cantidad o nota'),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
+              return _EntryCard(
+                item: item,
+                date: dateFormat.format(item.workDate),
+                quantity: _formatQuantity(item.quantity),
+                onApprove: item.status == 'draft' || item.status == 'pending'
+                    ? () => _setStatus(context, ref, item.id, 'confirmed')
+                    : null,
+                onReject: item.status == 'draft' || item.status == 'pending'
+                    ? () => _reject(context, ref, item.id)
+                    : null,
+                onEdit: item.status == 'void'
+                    ? null
+                    : () => _editEntry(context, ref, item),
               );
             },
           ),
@@ -133,17 +70,13 @@ class EntriesScreen extends ConsumerWidget {
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Registro aprobado correctamente.'),
-          ),
+          const SnackBar(content: Text('Registro aprobado correctamente.')),
         );
       }
     } catch (error) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('No se pudo actualizar el registro: $error'),
-          ),
+          SnackBar(content: Text('No se pudo actualizar el registro: $error')),
         );
       }
     }
@@ -159,9 +92,7 @@ class EntriesScreen extends ConsumerWidget {
       builder: (_) => const _RejectEntryDialog(),
     );
 
-    if (reason == null || reason.trim().isEmpty) {
-      return;
-    }
+    if (reason == null || reason.trim().isEmpty) return;
 
     try {
       await ref.read(workEntriesRepositoryProvider).updateStatus(
@@ -174,17 +105,13 @@ class EntriesScreen extends ConsumerWidget {
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Registro rechazado correctamente.'),
-          ),
+          const SnackBar(content: Text('Registro rechazado correctamente.')),
         );
       }
     } catch (error) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('No se pudo rechazar el registro: $error'),
-          ),
+          SnackBar(content: Text('No se pudo rechazar el registro: $error')),
         );
       }
     }
@@ -203,9 +130,7 @@ class EntriesScreen extends ConsumerWidget {
       ),
     );
 
-    if (result == null) {
-      return;
-    }
+    if (result == null) return;
 
     try {
       await ref.read(workEntriesRepositoryProvider).updateDetails(
@@ -218,38 +143,223 @@ class EntriesScreen extends ConsumerWidget {
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Registro actualizado correctamente.'),
-          ),
+          const SnackBar(content: Text('Registro actualizado correctamente.')),
         );
       }
     } catch (error) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('No se pudo editar el registro: $error'),
-          ),
+          SnackBar(content: Text('No se pudo editar el registro: $error')),
         );
       }
     }
-  }
-
-  String _statusLabel(String status) {
-    return switch (status) {
-      'draft' => 'Pendiente',
-      'pending' => 'Pendiente',
-      'confirmed' => 'Confirmado',
-      'corrected' => 'Corregido',
-      'rejected' => 'Rechazado',
-      'void' => 'Anulado',
-      _ => status,
-    };
   }
 
   String _formatQuantity(double value) {
     return value == value.roundToDouble()
         ? value.toStringAsFixed(0)
         : value.toStringAsFixed(2);
+  }
+}
+
+class _EntryCard extends StatelessWidget {
+  const _EntryCard({
+    required this.item,
+    required this.date,
+    required this.quantity,
+    this.onApprove,
+    this.onReject,
+    this.onEdit,
+  });
+
+  final WorkEntry item;
+  final String date;
+  final String quantity;
+  final VoidCallback? onApprove;
+  final VoidCallback? onReject;
+  final VoidCallback? onEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  child: Text(_initials(item.employeeName)),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.employeeName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                      Text(
+                        item.workTypeName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ],
+                  ),
+                ),
+                _StatusChip(status: item.status),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _InfoPill(icon: Icons.calendar_today_outlined, text: date),
+                _InfoPill(
+                  icon: Icons.numbers,
+                  text: '$quantity ${_unitLabel(item.unit)}',
+                ),
+              ],
+            ),
+            if (item.note != null && item.note!.trim().isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(item.note!),
+            ],
+            if (onApprove != null || onReject != null || onEdit != null) ...[
+              const Divider(height: 22),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  if (onReject != null)
+                    OutlinedButton.icon(
+                      onPressed: onReject,
+                      icon: const Icon(Icons.block),
+                      label: const Text('Rechazar'),
+                    ),
+                  if (onApprove != null)
+                    FilledButton.icon(
+                      onPressed: onApprove,
+                      icon: const Icon(Icons.check),
+                      label: const Text('Aprobar'),
+                    ),
+                  if (onEdit != null)
+                    TextButton.icon(
+                      onPressed: onEdit,
+                      icon: const Icon(Icons.edit_outlined),
+                      label: const Text('Editar'),
+                    ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _initials(String value) {
+    final parts = value.trim().split(RegExp(r'\s+'));
+    if (parts.isEmpty || parts.first.isEmpty) return '?';
+    if (parts.length == 1) return parts.first[0].toUpperCase();
+    return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
+  }
+
+  String _unitLabel(String value) {
+    return switch (value) {
+      'hour' => 'h',
+      'unit' => 'unid.',
+      'service' => 'serv.',
+      'bag' => 'bolsa',
+      'bucket' => 'tacho',
+      'tray' => 'bandeja',
+      _ => value,
+    };
+  }
+}
+
+class _InfoPill extends StatelessWidget {
+  const _InfoPill({
+    required this.icon,
+    required this.text,
+  });
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16),
+          const SizedBox(width: 6),
+          Text(text),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatusChip extends StatelessWidget {
+  const _StatusChip({required this.status});
+
+  final String status;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final (label, color, icon) = switch (status) {
+      'confirmed' => (
+          'Confirmado',
+          colorScheme.primaryContainer,
+          Icons.check_circle_outline,
+        ),
+      'corrected' => (
+          'Corregido',
+          colorScheme.tertiaryContainer,
+          Icons.edit_note_outlined,
+        ),
+      'rejected' => (
+          'Rechazado',
+          colorScheme.errorContainer,
+          Icons.block,
+        ),
+      'void' => (
+          'Anulado',
+          colorScheme.surfaceContainerHighest,
+          Icons.cancel_outlined,
+        ),
+      _ => (
+          'Pendiente',
+          colorScheme.secondaryContainer,
+          Icons.pending_actions,
+        ),
+    };
+
+    return Chip(
+      avatar: Icon(icon, size: 18),
+      label: Text(label),
+      backgroundColor: color,
+      side: BorderSide.none,
+      visualDensity: VisualDensity.compact,
+    );
   }
 }
 
@@ -274,9 +384,7 @@ class _RejectEntryDialogState extends State<_RejectEntryDialog> {
 
     if (value.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Ingresa el motivo del rechazo.'),
-        ),
+        const SnackBar(content: Text('Ingresa el motivo del rechazo.')),
       );
       return;
     }
@@ -290,9 +398,7 @@ class _RejectEntryDialogState extends State<_RejectEntryDialog> {
       title: const Text('Motivo del rechazo'),
       content: TextField(
         controller: _controller,
-        decoration: const InputDecoration(
-          labelText: 'Observación',
-        ),
+        decoration: const InputDecoration(labelText: 'Observación'),
         minLines: 2,
         maxLines: 4,
         autofocus: true,
@@ -333,12 +439,8 @@ class _EditEntryDialogState extends State<_EditEntryDialog> {
   @override
   void initState() {
     super.initState();
-    _quantityController = TextEditingController(
-      text: widget.initialQuantity,
-    );
-    _noteController = TextEditingController(
-      text: widget.initialNote,
-    );
+    _quantityController = TextEditingController(text: widget.initialQuantity);
+    _noteController = TextEditingController(text: widget.initialNote);
   }
 
   @override
@@ -355,9 +457,7 @@ class _EditEntryDialogState extends State<_EditEntryDialog> {
 
     if (quantity == null || quantity <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Ingresa una cantidad u horas válida.'),
-        ),
+        const SnackBar(content: Text('Ingresa una cantidad u horas válida.')),
       );
       return;
     }
@@ -381,21 +481,16 @@ class _EditEntryDialogState extends State<_EditEntryDialog> {
             TextField(
               controller: _quantityController,
               autofocus: true,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              decoration: const InputDecoration(
-                labelText: 'Cantidad u horas',
-              ),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(labelText: 'Cantidad u horas'),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: _noteController,
               minLines: 2,
               maxLines: 4,
-              decoration: const InputDecoration(
-                labelText: 'Nota',
-              ),
+              decoration: const InputDecoration(labelText: 'Nota'),
               textInputAction: TextInputAction.done,
               onSubmitted: (_) => _submit(),
             ),

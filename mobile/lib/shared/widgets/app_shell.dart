@@ -17,7 +17,7 @@ class AppShell extends ConsumerWidget {
     _Destination('/payroll', Icons.payments_outlined, Icons.payments, 'Pagos'),
     _Destination(
         '/reports', Icons.bar_chart_outlined, Icons.bar_chart, 'Reportes'),
-    _Destination('/more', Icons.more_horiz, Icons.more, 'Mas'),
+    _Destination('/more', Icons.more_horiz, Icons.more, 'Más'),
   ];
 
   static const _operatorDestinations = [
@@ -35,6 +35,19 @@ class AppShell extends ConsumerWidget {
     final destinations = profile?.isOperator == true
         ? _operatorDestinations
         : _adminDestinations;
+    final routeAllowed = profile == null ||
+        (profile.isOperator
+            ? _operatorDestinations.any((d) => d.path == location)
+            : _adminDestinations.any((d) => d.path == location) ||
+                _adminSecondaryRoutes.contains(location));
+
+    if (!routeAllowed) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!context.mounted) return;
+        context.go(profile.isOperator ? '/operator' : '/dashboard');
+      });
+    }
+
     final currentIndex = destinations.indexWhere((d) => d.path == location);
 
     return Scaffold(
@@ -44,7 +57,7 @@ class AppShell extends ConsumerWidget {
         ),
         actions: [
           IconButton(
-            tooltip: 'Cerrar sesion',
+            tooltip: 'Cerrar sesión',
             icon: const Icon(Icons.logout),
             onPressed: () => Supabase.instance.client.auth.signOut(),
           ),
@@ -66,6 +79,12 @@ class AppShell extends ConsumerWidget {
     );
   }
 }
+
+const _adminSecondaryRoutes = {
+  '/employees',
+  '/work-types',
+  '/rates',
+};
 
 class _Destination {
   const _Destination(this.path, this.icon, this.selectedIcon, this.label);

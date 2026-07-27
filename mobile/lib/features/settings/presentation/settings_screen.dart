@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../shared/widgets/support_footer.dart';
+
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
@@ -23,7 +25,7 @@ class SettingsScreen extends StatelessWidget {
           child: ListTile(
             leading: const Icon(Icons.work_outline),
             title: const Text('Tipos de trabajo'),
-            subtitle: const Text('Unidades, categorias y estado'),
+            subtitle: const Text('Unidades, categorías y estado'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.go('/work-types'),
           ),
@@ -38,6 +40,7 @@ class SettingsScreen extends StatelessWidget {
             onTap: () => context.go('/rates'),
           ),
         ),
+        const SupportFooter(),
       ],
     );
   }

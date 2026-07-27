@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/auth/profile_provider.dart';
+import '../../../shared/widgets/section_card.dart';
 import '../../employees/data/employee.dart';
 import '../../employees/data/employees_repository.dart';
 import '../../work_types/data/work_type.dart';
@@ -25,7 +26,6 @@ class _OperatorNewEntryScreenState
   final _restMinutes = TextEditingController(text: '0');
   final _overtime = TextEditingController(text: '0');
   final _note = TextEditingController();
-  final _newWorkType = TextEditingController();
   final _inlineEmployee = TextEditingController();
   final _inlineWorkType = TextEditingController();
   String? _employeeId;
@@ -42,7 +42,6 @@ class _OperatorNewEntryScreenState
     _restMinutes.dispose();
     _overtime.dispose();
     _note.dispose();
-    _newWorkType.dispose();
     _inlineEmployee.dispose();
     _inlineWorkType.dispose();
     super.dispose();
@@ -52,196 +51,228 @@ class _OperatorNewEntryScreenState
   Widget build(BuildContext context) {
     final workTypes = ref.watch(workTypesProvider);
     final employees = ref.watch(employeesProvider);
-    final dateFormat = DateFormat('dd/MM/yyyy', 'es_BO');
 
     return Form(
       key: _formKey,
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Text(
-            'Jornada diaria',
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
-          const SizedBox(height: 8),
-          const Text('Guarda borrador o envia la jornada al gerente.'),
-          const SizedBox(height: 16),
-          employees.when(
-            loading: () => const LinearProgressIndicator(),
-            error: (error, _) => Text('No se cargaron trabajadores: $error'),
-            data: (items) =>
-                _employeeDropdown(items.where((e) => e.active).toList()),
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _inlineEmployee,
-            decoration: const InputDecoration(
-              labelText: 'Escribir trabajador si no esta en la lista',
-              prefixIcon: Icon(Icons.person_add_alt),
-            ),
-            onChanged: (value) {
-              if (value.trim().isNotEmpty && _employeeId != null) {
-                setState(() => _employeeId = null);
-              }
-            },
-          ),
-          TextButton.icon(
-            onPressed: _createEmployee,
-            icon: const Icon(Icons.person_add_alt),
-            label: const Text('Guardar nuevo trabajador'),
-          ),
-          const SizedBox(height: 8),
-          workTypes.when(
-            loading: () => const LinearProgressIndicator(),
-            error: (error, _) =>
-                Text('No se cargaron tipos de trabajo: $error'),
-            data: (items) =>
-                _workTypeDropdown(items.where((e) => e.active).toList()),
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _inlineWorkType,
-            decoration: const InputDecoration(
-              labelText: 'Escribir trabajo si no esta en la lista',
-              prefixIcon: Icon(Icons.edit_note_outlined),
-              hintText: 'Ej: Fundir silicato',
-            ),
-            onChanged: (value) {
-              if (value.trim().isNotEmpty && _workTypeId != null) {
-                setState(() => _workTypeId = null);
-              }
-            },
-          ),
-          TextButton.icon(
-            onPressed: _createWorkType,
-            icon: const Icon(Icons.add_business_outlined),
-            label: const Text('Guardar nuevo trabajo'),
-          ),
-          const SizedBox(height: 12),
-          SegmentedButton<String>(
-            segments: const [
-              ButtonSegment(
-                value: 'presente',
-                label: Text('Presente'),
-                icon: Icon(Icons.check_circle_outline),
-              ),
-              ButtonSegment(
-                value: 'falta_justificada',
-                label: Text('Justificada'),
-                icon: Icon(Icons.event_available_outlined),
-              ),
-              ButtonSegment(
-                value: 'falta_injustificada',
-                label: Text('Falta'),
-                icon: Icon(Icons.cancel_outlined),
-              ),
-            ],
-            selected: {_attendanceStatus},
-            onSelectionChanged: (value) {
-              setState(() => _attendanceStatus = value.first);
-            },
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () => _pickTime(isStart: true),
-                  icon: const Icon(Icons.login_outlined),
-                  label: Text(_startTime == null
-                      ? 'Entrada'
-                      : _startTime!.format(context)),
+          _ScreenHeader(workDate: _workDate, onPickDate: _pickDate),
+          const SizedBox(height: 10),
+          SectionCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const _SectionTitle(
+                  icon: Icons.groups_outlined,
+                  title: 'Trabajador y trabajo',
                 ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () => _pickTime(isStart: false),
-                  icon: const Icon(Icons.logout_outlined),
-                  label: Text(
-                      _endTime == null ? 'Salida' : _endTime!.format(context)),
+                const SizedBox(height: 12),
+                employees.when(
+                  loading: () => const LinearProgressIndicator(),
+                  error: (error, _) =>
+                      Text('No se cargaron trabajadores: $error'),
+                  data: (items) =>
+                      _employeeDropdown(items.where((e) => e.active).toList()),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: TextFormField(
-                  controller: _restMinutes,
-                  keyboardType: TextInputType.number,
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _inlineEmployee,
                   decoration: const InputDecoration(
-                    labelText: 'Descanso',
-                    suffixText: 'min',
-                    prefixIcon: Icon(Icons.free_breakfast_outlined),
+                    labelText: 'Escribir trabajador rápido',
+                    hintText: 'Si no está en la lista',
+                    prefixIcon: Icon(Icons.person_add_alt),
                   ),
-                  validator: (value) {
-                    final parsed = int.tryParse(value ?? '0');
-                    if (parsed == null || parsed < 0) return 'Invalido';
-                    return null;
+                  onChanged: (value) {
+                    if (value.trim().isNotEmpty && _employeeId != null) {
+                      setState(() => _employeeId = null);
+                    }
                   },
                 ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: TextFormField(
-                  controller: _overtime,
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: _createEmployee,
+                    icon: const Icon(Icons.person_add_alt),
+                    label: const Text('Agregar trabajador con datos'),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                workTypes.when(
+                  loading: () => const LinearProgressIndicator(),
+                  error: (error, _) =>
+                      Text('No se cargaron tipos de trabajo: $error'),
+                  data: (items) =>
+                      _workTypeDropdown(items.where((e) => e.active).toList()),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _inlineWorkType,
+                  decoration: const InputDecoration(
+                    labelText: 'Escribir trabajo rápido',
+                    hintText: 'Ej: Fundir silicato',
+                    prefixIcon: Icon(Icons.edit_note_outlined),
+                  ),
+                  onChanged: (value) {
+                    if (value.trim().isNotEmpty && _workTypeId != null) {
+                      setState(() => _workTypeId = null);
+                    }
+                  },
+                ),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: _createWorkType,
+                    icon: const Icon(Icons.add_business_outlined),
+                    label: const Text('Agregar trabajo con unidad'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          SectionCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const _SectionTitle(
+                  icon: Icons.schedule_outlined,
+                  title: 'Asistencia y horas',
+                ),
+                const SizedBox(height: 12),
+                SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(
+                      value: 'presente',
+                      label: Text('Presente'),
+                      icon: Icon(Icons.check_circle_outline),
+                    ),
+                    ButtonSegment(
+                      value: 'falta_justificada',
+                      label: Text('Justificada'),
+                      icon: Icon(Icons.event_available_outlined),
+                    ),
+                    ButtonSegment(
+                      value: 'falta_injustificada',
+                      label: Text('Falta'),
+                      icon: Icon(Icons.cancel_outlined),
+                    ),
+                  ],
+                  selected: {_attendanceStatus},
+                  onSelectionChanged: (value) {
+                    setState(() => _attendanceStatus = value.first);
+                  },
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _pickTime(isStart: true),
+                        icon: const Icon(Icons.login_outlined),
+                        label: Text(_startTime == null
+                            ? 'Entrada'
+                            : _startTime!.format(context)),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _pickTime(isStart: false),
+                        icon: const Icon(Icons.logout_outlined),
+                        label: Text(_endTime == null
+                            ? 'Salida'
+                            : _endTime!.format(context)),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: _restMinutes,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Descanso',
+                          suffixText: 'min',
+                          prefixIcon: Icon(Icons.free_breakfast_outlined),
+                        ),
+                        validator: (value) {
+                          final parsed = int.tryParse(value ?? '0');
+                          if (parsed == null || parsed < 0) return 'Inválido';
+                          return null;
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextFormField(
+                        controller: _overtime,
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        decoration: const InputDecoration(
+                          labelText: 'Horas extra',
+                          suffixText: 'h',
+                          prefixIcon: Icon(Icons.more_time_outlined),
+                        ),
+                        validator: (value) {
+                          final parsed = double.tryParse(
+                              value?.replaceAll(',', '.') ?? '0');
+                          if (parsed == null || parsed < 0) return 'Inválido';
+                          return null;
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _quantity,
                   keyboardType:
                       const TextInputType.numberWithOptions(decimal: true),
                   decoration: const InputDecoration(
-                    labelText: 'Horas extra',
-                    suffixText: 'h',
-                    prefixIcon: Icon(Icons.more_time_outlined),
+                    labelText: 'Horas normales o cantidad',
+                    prefixIcon: Icon(Icons.numbers),
                   ),
                   validator: (value) {
+                    if (_attendanceStatus != 'presente') return null;
                     final parsed =
-                        double.tryParse(value?.replaceAll(',', '.') ?? '0');
-                    if (parsed == null || parsed < 0) return 'Invalido';
+                        double.tryParse(value?.replaceAll(',', '.') ?? '');
+                    if (parsed == null || parsed <= 0) {
+                      return 'Ingresa una cantidad válida';
+                    }
                     return null;
                   },
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          TextFormField(
-            controller: _quantity,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(
-              labelText: 'Horas normales o cantidad',
-              prefixIcon: Icon(Icons.numbers),
-            ),
-            validator: (value) {
-              if (_attendanceStatus != 'presente') return null;
-              final parsed = double.tryParse(value?.replaceAll(',', '.') ?? '');
-              if (parsed == null || parsed <= 0) {
-                return 'Ingresa una cantidad valida';
-              }
-              return null;
-            },
-          ),
-          const SizedBox(height: 12),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Fecha'),
-            subtitle: Text(dateFormat.format(_workDate)),
-            trailing: const Icon(Icons.calendar_month_outlined),
-            onTap: _pickDate,
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _note,
-            minLines: 3,
-            maxLines: 6,
-            decoration: const InputDecoration(
-              labelText: 'Notas del trabajo',
-              prefixIcon: Icon(Icons.notes_outlined),
-              hintText:
-                  'Ej: trabajo en cisterna grande, llego tarde, faltaron bolsas',
+              ],
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 10),
+          SectionCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const _SectionTitle(
+                  icon: Icons.notes_outlined,
+                  title: 'Notas',
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _note,
+                  minLines: 3,
+                  maxLines: 6,
+                  decoration: const InputDecoration(
+                    labelText: 'Notas del trabajo',
+                    hintText:
+                        'Ej: trabajo en cisterna grande, llegó tarde, faltaron bolsas',
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
           Row(
             children: [
               Expanded(
@@ -268,7 +299,8 @@ class _OperatorNewEntryScreenState
 
   Widget _workTypeDropdown(List<WorkType> items) {
     return DropdownButtonFormField<String>(
-      value: _workTypeId,
+      initialValue: _workTypeId,
+      isExpanded: true,
       decoration: const InputDecoration(
         labelText: 'Tipo de trabajo',
         prefixIcon: Icon(Icons.work_outline),
@@ -277,7 +309,10 @@ class _OperatorNewEntryScreenState
         for (final item in items)
           DropdownMenuItem(
             value: item.id,
-            child: Text('${item.name} (${item.unit})'),
+            child: Text(
+              '${item.name} (${_unitLabel(item.unit)})',
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
       ],
       onChanged: (value) => setState(() => _workTypeId = value),
@@ -286,14 +321,18 @@ class _OperatorNewEntryScreenState
 
   Widget _employeeDropdown(List<Employee> items) {
     return DropdownButtonFormField<String>(
-      value: _employeeId,
+      initialValue: _employeeId,
+      isExpanded: true,
       decoration: const InputDecoration(
         labelText: 'Trabajador',
         prefixIcon: Icon(Icons.person_outline),
       ),
       items: [
         for (final item in items)
-          DropdownMenuItem(value: item.id, child: Text(item.fullName)),
+          DropdownMenuItem(
+            value: item.id,
+            child: Text(item.fullName, overflow: TextOverflow.ellipsis),
+          ),
       ],
       onChanged: (value) => setState(() => _employeeId = value),
     );
@@ -439,34 +478,29 @@ class _OperatorNewEntryScreenState
   }
 
   Future<void> _createWorkType() async {
-    final name = await _askText(
-      title: 'Agregar trabajo',
-      label: 'Nombre del trabajo',
-      controller: _newWorkType,
+    final draft = await showDialog<_WorkTypeDraft>(
+      context: context,
+      builder: (_) => const _WorkTypeDialog(),
     );
 
-    if (name == null) return;
+    if (draft == null) return;
 
     try {
-      final code = name
-          .toLowerCase()
-          .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
-          .replaceAll(RegExp(r'^_|_$'), '');
-
       final workType =
           await ref.read(workTypesRepositoryProvider).saveReturning(
-                code: code.isEmpty
-                    ? DateTime.now().millisecondsSinceEpoch.toString()
-                    : code,
-                name: name,
-                unit: 'unit',
-                category: 'quantity',
+                code: _codeFromName(draft.name),
+                name: draft.name,
+                unit: draft.unit,
+                category: draft.category,
                 active: true,
               );
 
       if (!mounted) return;
 
-      setState(() => _workTypeId = workType.id);
+      setState(() {
+        _workTypeId = workType.id;
+        _inlineWorkType.clear();
+      });
       ref.invalidate(workTypesProvider);
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -502,18 +536,16 @@ class _OperatorNewEntryScreenState
   }
 
   Future<String> _createEmployeeFromName(String name) async {
-    final code = _codeFromName(name);
     final row = await ref.read(employeesRepositoryProvider).saveReturning(
-          code: code,
+          code: _codeFromName(name),
           fullName: name,
         );
     return row.id;
   }
 
   Future<String> _createWorkTypeFromName(String name) async {
-    final code = _codeFromName(name);
     final row = await ref.read(workTypesRepositoryProvider).saveReturning(
-          code: code,
+          code: _codeFromName(name),
           name: name,
           unit: 'unit',
           category: 'quantity',
@@ -548,39 +580,217 @@ class _OperatorNewEntryScreenState
     return TimeOfDayParts(time.hour, time.minute);
   }
 
-  Future<String?> _askText({
-    required String title,
-    required String label,
-    required TextEditingController controller,
-  }) async {
-    controller.clear();
-    return showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: TextField(
-          controller: controller,
-          decoration: InputDecoration(labelText: label),
-          autofocus: true,
+  String _unitLabel(String unit) {
+    return switch (unit) {
+      'hour' => 'hora',
+      'unit' => 'unidad',
+      'service' => 'servicio',
+      'bag' => 'bolsa',
+      'bucket' => 'tacho',
+      'tray' => 'bandeja',
+      _ => unit,
+    };
+  }
+}
+
+class _ScreenHeader extends StatelessWidget {
+  const _ScreenHeader({
+    required this.workDate,
+    required this.onPickDate,
+  });
+
+  final DateTime workDate;
+  final VoidCallback onPickDate;
+
+  @override
+  Widget build(BuildContext context) {
+    final dateFormat = DateFormat('dd/MM/yyyy', 'es_BO');
+
+    return Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Jornada diaria',
+                  style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 2),
+              Text(
+                'Guarda borrador o envía la jornada al gerente.',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+              ),
+            ],
+          ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final value = controller.text.trim();
-              Navigator.of(context).pop(value.isEmpty ? null : value);
-            },
-            child: const Text('Guardar'),
-          ),
-        ],
-      ),
+        OutlinedButton.icon(
+          onPressed: onPickDate,
+          icon: const Icon(Icons.calendar_month_outlined),
+          label: Text(dateFormat.format(workDate)),
+        ),
+      ],
     );
   }
 }
 
+class _SectionTitle extends StatelessWidget {
+  const _SectionTitle({
+    required this.icon,
+    required this.title,
+  });
+
+  final IconData icon;
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, color: Theme.of(context).colorScheme.primary),
+        const SizedBox(width: 8),
+        Text(title, style: Theme.of(context).textTheme.titleMedium),
+      ],
+    );
+  }
+}
+
+class _WorkTypeDialog extends StatefulWidget {
+  const _WorkTypeDialog();
+
+  @override
+  State<_WorkTypeDialog> createState() => _WorkTypeDialogState();
+}
+
+class _WorkTypeDialogState extends State<_WorkTypeDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _name = TextEditingController();
+  String _unit = 'unit';
+  String _category = 'quantity';
+
+  @override
+  void dispose() {
+    _name.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    if (!_formKey.currentState!.validate()) return;
+    Navigator.of(context).pop(
+      _WorkTypeDraft(
+        name: _name.text.trim(),
+        unit: _unit,
+        category: _category,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Row(
+        children: [
+          Icon(Icons.add_business_outlined),
+          SizedBox(width: 10),
+          Expanded(child: Text('Agregar trabajo')),
+        ],
+      ),
+      content: SizedBox(
+        width: 440,
+        child: Form(
+          key: _formKey,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: _name,
+                  autofocus: true,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration: const InputDecoration(
+                    labelText: 'Nombre del trabajo',
+                    hintText: 'Ej: Bolsas de soda',
+                    prefixIcon: Icon(Icons.work_outline),
+                  ),
+                  validator: (value) => value == null || value.trim().isEmpty
+                      ? 'Ingresa el nombre del trabajo'
+                      : null,
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: _unit,
+                  decoration: const InputDecoration(
+                    labelText: 'Unidad de pago',
+                    prefixIcon: Icon(Icons.straighten_outlined),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'hour', child: Text('Hora')),
+                    DropdownMenuItem(value: 'unit', child: Text('Unidad')),
+                    DropdownMenuItem(value: 'service', child: Text('Servicio')),
+                    DropdownMenuItem(value: 'bag', child: Text('Bolsa')),
+                    DropdownMenuItem(value: 'bucket', child: Text('Tacho')),
+                    DropdownMenuItem(value: 'tray', child: Text('Bandeja')),
+                  ],
+                  onChanged: (value) => setState(() {
+                    _unit = value ?? _unit;
+                    _category = _unit == 'hour' ? 'hourly' : 'quantity';
+                  }),
+                ),
+                const SizedBox(height: 12),
+                SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(
+                      value: 'quantity',
+                      label: Text('Cantidad'),
+                      icon: Icon(Icons.numbers),
+                    ),
+                    ButtonSegment(
+                      value: 'hourly',
+                      label: Text('Horas'),
+                      icon: Icon(Icons.schedule_outlined),
+                    ),
+                    ButtonSegment(
+                      value: 'attendance',
+                      label: Text('Asistencia'),
+                      icon: Icon(Icons.event_available_outlined),
+                    ),
+                  ],
+                  selected: {_category},
+                  onSelectionChanged: (value) {
+                    setState(() => _category = value.first);
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton.icon(
+          onPressed: _submit,
+          icon: const Icon(Icons.save_outlined),
+          label: const Text('Guardar'),
+        ),
+      ],
+    );
+  }
+}
+
+class _WorkTypeDraft {
+  const _WorkTypeDraft({
+    required this.name,
+    required this.unit,
+    required this.category,
+  });
+
+  final String name;
+  final String unit;
+  final String category;
+}
 
 class _EmployeeDialog extends StatefulWidget {
   const _EmployeeDialog();
@@ -661,10 +871,9 @@ class _EmployeeDialogState extends State<_EmployeeDialog> {
                     labelText: 'Nombre completo',
                     prefixIcon: Icon(Icons.person_outline),
                   ),
-                  validator: (value) =>
-                      value == null || value.trim().isEmpty
-                          ? 'Ingresa el nombre completo'
-                          : null,
+                  validator: (value) => value == null || value.trim().isEmpty
+                      ? 'Ingresa el nombre completo'
+                      : null,
                 ),
                 const SizedBox(height: 12),
                 TextFormField(

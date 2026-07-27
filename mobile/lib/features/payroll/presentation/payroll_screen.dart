@@ -32,6 +32,7 @@ class PayrollScreen extends ConsumerWidget {
 
         final gross = items.fold(0.0, (sum, item) => sum + item.grossPayable);
         final total = items.fold(0.0, (sum, item) => sum + item.totalPayable);
+        final missingRates = items.where((item) => item.hasMissingRates).length;
 
         return RefreshIndicator(
           onRefresh: () async => ref.invalidate(payrollSummariesProvider),
@@ -42,14 +43,36 @@ class PayrollScreen extends ConsumerWidget {
                 'Pagos estimados',
                 style: Theme.of(context).textTheme.titleLarge,
               ),
-              const SizedBox(height: 6),
-              Text('Total trabajo: ${money.format(gross)}'),
-              Text('A pagar: ${money.format(total)}'),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _MetricCard(
+                    icon: Icons.work_outline,
+                    label: 'Trabajo',
+                    value: money.format(gross),
+                  ),
+                  _MetricCard(
+                    icon: Icons.payments_outlined,
+                    label: 'A pagar',
+                    value: money.format(total),
+                  ),
+                  _MetricCard(
+                    icon: Icons.sell_outlined,
+                    label: 'Sin precio',
+                    value: '$missingRates',
+                    warning: missingRates > 0,
+                  ),
+                ],
+              ),
               const SizedBox(height: 12),
               OutlinedButton.icon(
                 onPressed: () async {
                   try {
-                    await ref.read(payrollRepositoryProvider).closeCurrentWeek();
+                    await ref
+                        .read(payrollRepositoryProvider)
+                        .closeCurrentWeek();
                     ref.invalidate(payrollSummariesProvider);
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
@@ -80,6 +103,75 @@ class PayrollScreen extends ConsumerWidget {
           ),
         );
       },
+    );
+  }
+}
+
+class _MetricCard extends StatelessWidget {
+  const _MetricCard({
+    required this.icon,
+    required this.label,
+    required this.value,
+    this.warning = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final bool warning;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return SizedBox(
+      width: 150,
+      child: Card(
+        color: warning ? colorScheme.errorContainer : colorScheme.surface,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(icon, color: colorScheme.primary),
+              const SizedBox(height: 8),
+              Text(label, style: Theme.of(context).textTheme.labelMedium),
+              const SizedBox(height: 2),
+              Text(
+                value,
+                style: Theme.of(context)
+                    .textTheme
+                    .titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w700),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PaymentStatusChip extends StatelessWidget {
+  const _PaymentStatusChip({required this.isPaid});
+
+  final bool isPaid;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Chip(
+      avatar: Icon(
+        isPaid ? Icons.check_circle_outline : Icons.pending_actions,
+        size: 18,
+      ),
+      label: Text(isPaid ? 'Pagado' : 'Pendiente'),
+      backgroundColor: isPaid
+          ? colorScheme.primaryContainer
+          : colorScheme.secondaryContainer,
+      side: BorderSide.none,
+      visualDensity: VisualDensity.compact,
     );
   }
 }
@@ -135,7 +227,8 @@ class _EmployeePayrollCard extends ConsumerWidget {
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
-                              content: Text('No se pudo reabrir el pago: $error'),
+                              content:
+                                  Text('No se pudo reabrir el pago: $error'),
                             ),
                           );
                         }
@@ -169,7 +262,7 @@ class _EmployeePayrollCard extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(money.format(summary.totalPayable)),
-                    const Text('Pendiente'),
+                    _PaymentStatusChip(isPaid: summary.isPaid),
                   ],
                 ),
               ],
@@ -219,7 +312,8 @@ class _EmployeePayrollCard extends ConsumerWidget {
                             if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
-                                  content: Text('Ajuste eliminado correctamente.'),
+                                  content:
+                                      Text('Ajuste eliminado correctamente.'),
                                 ),
                               );
                             }
@@ -227,7 +321,8 @@ class _EmployeePayrollCard extends ConsumerWidget {
                             if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
-                                  content: Text('No se pudo eliminar el ajuste: $error'),
+                                  content: Text(
+                                      'No se pudo eliminar el ajuste: $error'),
                                 ),
                               );
                             }
@@ -243,15 +338,18 @@ class _EmployeePayrollCard extends ConsumerWidget {
               runSpacing: 8,
               children: [
                 OutlinedButton(
-                  onPressed: () => _addAdjustment(context, ref, summary, 'bonus'),
+                  onPressed: () =>
+                      _addAdjustment(context, ref, summary, 'bonus'),
                   child: const Text('Bono'),
                 ),
                 OutlinedButton(
-                  onPressed: () => _addAdjustment(context, ref, summary, 'advance'),
+                  onPressed: () =>
+                      _addAdjustment(context, ref, summary, 'advance'),
                   child: const Text('Anticipo'),
                 ),
                 OutlinedButton(
-                  onPressed: () => _addAdjustment(context, ref, summary, 'deduction'),
+                  onPressed: () =>
+                      _addAdjustment(context, ref, summary, 'deduction'),
                   child: const Text('Descuento'),
                 ),
               ],
@@ -278,7 +376,8 @@ class _EmployeePayrollCard extends ConsumerWidget {
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
-                              content: Text('No se pudo reabrir el pago: $error'),
+                              content:
+                                  Text('No se pudo reabrir el pago: $error'),
                             ),
                           );
                         }
@@ -310,7 +409,8 @@ class _EmployeePayrollCard extends ConsumerWidget {
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
-                              content: Text('No se pudo registrar el pago: $error'),
+                              content:
+                                  Text('No se pudo registrar el pago: $error'),
                             ),
                           );
                         }
@@ -420,7 +520,7 @@ class _PayrollLineTile extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(line.workTypeName),
-              Text('$quantity ${line.unit}'),
+              Text('$quantity ${_unitLabel(line.unit)}'),
               Text(
                 line.rate == null
                     ? 'Sin precio'
@@ -470,6 +570,18 @@ class _PayrollLineTile extends ConsumerWidget {
         );
       }
     }
+  }
+
+  String _unitLabel(String value) {
+    return switch (value) {
+      'hour' => 'h',
+      'unit' => 'unid.',
+      'service' => 'serv.',
+      'bag' => 'bolsa',
+      'bucket' => 'tacho',
+      'tray' => 'bandeja',
+      _ => value,
+    };
   }
 }
 
@@ -539,7 +651,8 @@ class _AdjustmentDialogState extends State<_AdjustmentDialog> {
             TextField(
               controller: _amountController,
               autofocus: true,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
               decoration: const InputDecoration(
                 labelText: 'Monto',
                 prefixText: 'Bs ',

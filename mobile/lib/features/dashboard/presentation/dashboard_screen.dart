@@ -4,13 +4,12 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/supabase/supabase_providers.dart';
-import '../../../shared/widgets/section_card.dart';
 
 final dashboardStatsProvider = FutureProvider<Map<String, int>>((ref) async {
   final client = ref.watch(supabaseClientProvider);
   final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
   final userId = client.auth.currentUser?.id;
-  if (userId == null) throw StateError('Sesion no iniciada.');
+  if (userId == null) throw StateError('Sesión no iniciada.');
   final profile = await client
       .from('profiles')
       .select('empresa_id')
@@ -64,74 +63,82 @@ class DashboardScreen extends ConsumerWidget {
     return RefreshIndicator(
       onRefresh: () async => ref.invalidate(dashboardStatsProvider),
       child: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
         children: [
-          Text(
-            'Semana actual',
-            style: Theme.of(context).textTheme.titleLarge,
+          _DashboardHeader(
+            title: 'Panel gerente',
+            subtitle:
+                '${format.format(weekStart)} al ${format.format(weekEnd)}',
+            onRefresh: () => ref.invalidate(dashboardStatsProvider),
           ),
-          const SizedBox(height: 8),
-          Text('${format.format(weekStart)} al ${format.format(weekEnd)}'),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           stats.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (error, _) => SectionCard(child: Text('Error: $error')),
+            loading: () => const LinearProgressIndicator(),
+            error: (error, _) => Card(
+              color: Theme.of(context).colorScheme.errorContainer,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Text('No se pudo cargar el panel: $error'),
+              ),
+            ),
             data: (data) => LayoutBuilder(
               builder: (context, constraints) {
-                final columns = constraints.maxWidth > 720 ? 4 : 2;
+                final columns = constraints.maxWidth > 760 ? 4 : 2;
                 return GridView.count(
                   crossAxisCount: columns,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 8,
+                  mainAxisSpacing: 8,
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
-                  childAspectRatio: 1.45,
+                  childAspectRatio: constraints.maxWidth > 760 ? 2.25 : 1.75,
                   children: [
-                    _StatCard('Trabajadores', '${data['employees']}',
-                        Icons.groups_outlined),
-                    _StatCard('Jornadas hoy', '${data['entriesToday']}',
-                        Icons.today_outlined),
-                    _StatCard('Tipos activos', '${data['workTypes']}',
-                        Icons.work_outline),
-                    _StatCard('Pendientes', '${data['pending']}',
-                        Icons.pending_actions),
+                    _StatCard(
+                      label: 'Trabajadores',
+                      value: '${data['employees']}',
+                      icon: Icons.groups_outlined,
+                    ),
+                    _StatCard(
+                      label: 'Hoy',
+                      value: '${data['entriesToday']}',
+                      icon: Icons.today_outlined,
+                    ),
+                    _StatCard(
+                      label: 'Trabajos',
+                      value: '${data['workTypes']}',
+                      icon: Icons.work_outline,
+                    ),
+                    _StatCard(
+                      label: 'Pendientes',
+                      value: '${data['pending']}',
+                      icon: Icons.pending_actions,
+                      warning: (data['pending'] ?? 0) > 0,
+                    ),
                   ],
                 );
               },
             ),
           ),
-          const SizedBox(height: 20),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              FilledButton.icon(
-                onPressed: () => context.go('/entries'),
-                icon: const Icon(Icons.add),
-                label: const Text('Ver jornadas'),
-              ),
-              OutlinedButton.icon(
-                onPressed: () => context.go('/entries'),
-                icon: const Icon(Icons.fact_check_outlined),
-                label: const Text('Revisar pendientes'),
-              ),
-              OutlinedButton.icon(
-                onPressed: () => context.go('/payroll'),
-                icon: const Icon(Icons.lock_outline),
-                label: const Text('Cerrar semana'),
-              ),
-              OutlinedButton.icon(
-                onPressed: () => context.go('/reports'),
-                icon: const Icon(Icons.table_view_outlined),
-                label: const Text('Generar planilla'),
-              ),
-            ],
+          const SizedBox(height: 16),
+          Text('Acciones rápidas',
+              style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          _ActionTile(
+            icon: Icons.fact_check_outlined,
+            title: 'Revisar jornadas',
+            subtitle: 'Aprobar, corregir o rechazar registros',
+            onTap: () => context.go('/entries'),
           ),
-          const SizedBox(height: 20),
-          const SectionCard(
-            child: Text(
-              'El gerente revisa jornadas, define tarifas y confirma pagos dentro de su empresa.',
-            ),
+          _ActionTile(
+            icon: Icons.payments_outlined,
+            title: 'Pagos estimados',
+            subtitle: 'Ver faltantes, ajustes y pagos',
+            onTap: () => context.go('/payroll'),
+          ),
+          _ActionTile(
+            icon: Icons.table_view_outlined,
+            title: 'Reportes',
+            subtitle: 'Exportar PDF y planillas',
+            onTap: () => context.go('/reports'),
           ),
         ],
       ),
@@ -139,24 +146,122 @@ class DashboardScreen extends ConsumerWidget {
   }
 }
 
+class _DashboardHeader extends StatelessWidget {
+  const _DashboardHeader({
+    required this.title,
+    required this.subtitle,
+    required this.onRefresh,
+  });
+
+  final String title;
+  final String subtitle;
+  final VoidCallback onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 2),
+              Text(
+                subtitle,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+              ),
+            ],
+          ),
+        ),
+        IconButton.filledTonal(
+          tooltip: 'Actualizar',
+          onPressed: onRefresh,
+          icon: const Icon(Icons.refresh),
+        ),
+      ],
+    );
+  }
+}
+
 class _StatCard extends StatelessWidget {
-  const _StatCard(this.label, this.value, this.icon);
+  const _StatCard({
+    required this.label,
+    required this.value,
+    required this.icon,
+    this.warning = false,
+  });
 
   final String label;
   final String value;
   final IconData icon;
+  final bool warning;
 
   @override
   Widget build(BuildContext context) {
-    return SectionCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: Theme.of(context).colorScheme.primary),
-          const Spacer(),
-          Text(value, style: Theme.of(context).textTheme.headlineSmall),
-          Text(label),
-        ],
+    final colorScheme = Theme.of(context).colorScheme;
+    final color = warning ? colorScheme.errorContainer : colorScheme.surface;
+
+    return Card(
+      color: color,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            Icon(icon, color: colorScheme.primary),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    value,
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleLarge
+                        ?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ActionTile extends StatelessWidget {
+  const _ActionTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: ListTile(
+        leading: Icon(icon),
+        title: Text(title),
+        subtitle: Text(subtitle),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: onTap,
       ),
     );
   }

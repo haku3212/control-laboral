@@ -9,6 +9,27 @@ import '../data/work_types_repository.dart';
 const units = ['hour', 'unit', 'service', 'bag', 'bucket', 'tray'];
 const categories = ['hourly', 'quantity', 'attendance'];
 
+String unitLabel(String value) {
+  return switch (value) {
+    'hour' => 'Hora',
+    'unit' => 'Unidad',
+    'service' => 'Servicio',
+    'bag' => 'Bolsa',
+    'bucket' => 'Tacho',
+    'tray' => 'Bandeja',
+    _ => value,
+  };
+}
+
+String categoryLabel(String value) {
+  return switch (value) {
+    'hourly' => 'Por horas',
+    'quantity' => 'Por cantidad',
+    'attendance' => 'Asistencia',
+    _ => value,
+  };
+}
+
 class WorkTypesScreen extends ConsumerWidget {
   const WorkTypesScreen({super.key});
 
@@ -36,17 +57,27 @@ class WorkTypesScreen extends ConsumerWidget {
                 final item = items[index];
                 return Card(
                   child: ListTile(
-                    leading: Icon(
-                      item.category == 'hourly'
-                          ? Icons.schedule
-                          : Icons.inventory_2_outlined,
+                    leading: CircleAvatar(
+                      child: Icon(
+                        item.category == 'hourly'
+                            ? Icons.schedule
+                            : Icons.inventory_2_outlined,
+                      ),
                     ),
                     title: Text(item.name),
-                    subtitle:
-                        Text('${item.code} - ${item.unit} - ${item.category}'),
-                    trailing: item.active
-                        ? const Icon(Icons.check_circle_outline)
-                        : const Icon(Icons.pause_circle_outline),
+                    subtitle: Text(
+                      '${item.code} - ${unitLabel(item.unit)} - ${categoryLabel(item.category)}',
+                    ),
+                    trailing: Chip(
+                      avatar: Icon(
+                        item.active
+                            ? Icons.check_circle_outline
+                            : Icons.pause_circle_outline,
+                        size: 18,
+                      ),
+                      label: Text(item.active ? 'Activo' : 'Pausado'),
+                      side: BorderSide.none,
+                    ),
                     onTap: () => _openForm(context, ref, item),
                   ),
                 );
@@ -64,10 +95,14 @@ class WorkTypesScreen extends ConsumerWidget {
   }
 
   Future<void> _openForm(
-      BuildContext context, WidgetRef ref, WorkType? item) async {
+    BuildContext context,
+    WidgetRef ref,
+    WorkType? item,
+  ) async {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       builder: (_) => _WorkTypeForm(item: item),
     );
     ref.invalidate(workTypesProvider);
@@ -112,6 +147,8 @@ class _WorkTypeFormState extends ConsumerState<_WorkTypeForm> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Padding(
       padding: EdgeInsets.only(
         left: 16,
@@ -124,56 +161,94 @@ class _WorkTypeFormState extends ConsumerState<_WorkTypeForm> {
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              Center(
+                child: Container(
+                  width: 42,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.outlineVariant,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
               Text(
                 widget.item == null
                     ? 'Crear tipo de trabajo'
                     : 'Editar tipo de trabajo',
-                style: Theme.of(context).textTheme.titleLarge,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.titleLarge,
               ),
               const SizedBox(height: 16),
               TextFormField(
                 controller: _code,
-                decoration: const InputDecoration(labelText: 'Codigo'),
+                decoration: const InputDecoration(
+                  labelText: 'Código',
+                  prefixIcon: Icon(Icons.badge_outlined),
+                ),
                 validator: _required,
               ),
               const SizedBox(height: 12),
               TextFormField(
                 controller: _name,
-                decoration: const InputDecoration(labelText: 'Nombre'),
+                decoration: const InputDecoration(
+                  labelText: 'Nombre',
+                  prefixIcon: Icon(Icons.work_outline),
+                ),
                 validator: _required,
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                value: _unit,
-                decoration: const InputDecoration(labelText: 'Unidad'),
+                initialValue: _unit,
+                decoration: const InputDecoration(
+                  labelText: 'Unidad',
+                  prefixIcon: Icon(Icons.straighten_outlined),
+                ),
                 items: [
                   for (final unit in units)
-                    DropdownMenuItem(value: unit, child: Text(unit)),
+                    DropdownMenuItem(value: unit, child: Text(unitLabel(unit))),
                 ],
-                onChanged: (value) => setState(() => _unit = value ?? _unit),
+                onChanged: (value) => setState(() {
+                  _unit = value ?? _unit;
+                  _category = _unit == 'hour' ? 'hourly' : _category;
+                }),
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                value: _category,
-                decoration: const InputDecoration(labelText: 'Categoria'),
+                initialValue: _category,
+                decoration: const InputDecoration(
+                  labelText: 'Categoría',
+                  prefixIcon: Icon(Icons.category_outlined),
+                ),
                 items: [
                   for (final category in categories)
-                    DropdownMenuItem(value: category, child: Text(category)),
+                    DropdownMenuItem(
+                      value: category,
+                      child: Text(categoryLabel(category)),
+                    ),
                 ],
                 onChanged: (value) =>
                     setState(() => _category = value ?? _category),
               ),
               SwitchListTile(
+                contentPadding: EdgeInsets.zero,
                 value: _active,
                 title: const Text('Activo'),
+                subtitle: const Text('Disponible para nuevos registros'),
                 onChanged: (value) => setState(() => _active = value),
               ),
               const SizedBox(height: 16),
               FilledButton.icon(
                 onPressed: _saving ? null : _save,
-                icon: const Icon(Icons.save_outlined),
-                label: const Text('Guardar'),
+                icon: _saving
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.save_outlined),
+                label: Text(_saving ? 'Guardando...' : 'Guardar'),
               ),
             ],
           ),

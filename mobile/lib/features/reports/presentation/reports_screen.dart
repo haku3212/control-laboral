@@ -146,19 +146,19 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
                         style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
                       ),
                       pw.Text(
-                        item.isPaid ? 'Se pago' : 'Pendiente',
+                        item.isPaid ? 'Se pagó' : 'Pendiente',
                         style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
                       ),
                     ],
                   ),
                   pw.SizedBox(height: 8),
-                  pw.Table.fromTextArray(
+                  pw.TableHelper.fromTextArray(
                     headers: ['Trabajo', 'Cantidad', 'Precio', 'Subtotal'],
                     data: [
                       for (final line in item.lines)
                         [
                           line.workTypeName,
-                          '${line.quantity} ${line.unit}',
+                          '${line.quantity} ${_unitLabel(line.unit)}',
                           money.format(line.rate ?? 0),
                           money.format(line.subtotal ?? 0),
                         ],
@@ -190,4 +190,16 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
     );
     return doc.save();
   }
+}
+
+String _unitLabel(String value) {
+  return switch (value) {
+    'hour' => 'h',
+    'unit' => 'unid.',
+    'service' => 'serv.',
+    'bag' => 'bolsa',
+    'bucket' => 'tacho',
+    'tray' => 'bandeja',
+    _ => value,
+  };
 }

@@ -203,9 +203,7 @@ class _RateFormState extends ConsumerState<_RateForm> {
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Vigente hasta'),
                 subtitle: Text(
-                  _validUntil == null
-                      ? 'Sin fin'
-                      : date.format(_validUntil!),
+                  _validUntil == null ? 'Sin fin' : date.format(_validUntil!),
                 ),
                 trailing: const Icon(Icons.event_busy_outlined),
                 onTap: _saving ? null : () => _pickDate(false),
@@ -213,9 +211,8 @@ class _RateFormState extends ConsumerState<_RateForm> {
               SwitchListTile(
                 value: _active,
                 title: const Text('Activa'),
-                onChanged: _saving
-                    ? null
-                    : (value) => setState(() => _active = value),
+                onChanged:
+                    _saving ? null : (value) => setState(() => _active = value),
               ),
               const SizedBox(height: 16),
               SizedBox(
@@ -242,7 +239,7 @@ class _RateFormState extends ConsumerState<_RateForm> {
     final activeItems = items.where((item) => item.active).toList();
 
     return DropdownButtonFormField<String>(
-      value: _workTypeId,
+      initialValue: _workTypeId,
       isExpanded: true,
       decoration: const InputDecoration(
         labelText: 'Tipo de trabajo',
@@ -258,9 +255,8 @@ class _RateFormState extends ConsumerState<_RateForm> {
           ),
       ],
       validator: (value) => value == null ? 'Requerido' : null,
-      onChanged: _saving
-          ? null
-          : (value) => setState(() => _workTypeId = value),
+      onChanged:
+          _saving ? null : (value) => setState(() => _workTypeId = value),
     );
   }
 
@@ -268,7 +264,7 @@ class _RateFormState extends ConsumerState<_RateForm> {
     final activeItems = items.where((item) => item.active).toList();
 
     return DropdownButtonFormField<String?>(
-      value: _employeeId,
+      initialValue: _employeeId,
       isExpanded: true,
       decoration: const InputDecoration(
         labelText: 'Trabajador',
@@ -287,9 +283,8 @@ class _RateFormState extends ConsumerState<_RateForm> {
             ),
           ),
       ],
-      onChanged: _saving
-          ? null
-          : (value) => setState(() => _employeeId = value),
+      onChanged:
+          _saving ? null : (value) => setState(() => _employeeId = value),
     );
   }
 
