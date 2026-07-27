@@ -584,10 +584,8 @@ class _OperatorNewEntryScreenState
 
   int _automaticRestMinutes() {
     final grossHours = _grossWorkedHours();
-    if (_startTime == null || grossHours == null) return 0;
-    final startMinutes = _startTime!.hour * 60 + _startTime!.minute;
-    final startsInMorning = startMinutes >= 7 * 60 && startMinutes < 14 * 60;
-    return startsInMorning && grossHours > 7 ? 30 : 0;
+    if (grossHours == null) return 0;
+    return grossHours > 7 ? 30 : 0;
   }
 
   TimeOfDayParts? _toParts(TimeOfDay? time) {
@@ -624,7 +622,7 @@ class _AutoBreakNotice extends StatelessWidget {
     final message = grossHours == null
         ? 'El descanso se calculará cuando ingreses entrada y salida.'
         : applied
-            ? 'Se descontarán 30 min automáticamente por turno de 07:00 a 14:00 mayor a 7 h.'
+            ? 'Se descontarán 30 min automáticamente por superar 7 h trabajadas.'
             : 'Sin descuento automático de descanso para este horario.';
 
     return Container(
