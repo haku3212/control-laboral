@@ -18,21 +18,26 @@ class PayrollScreen extends ConsumerWidget {
     return AsyncValueView(
       value: summaries,
       data: (items) {
-        if (items.isEmpty) {
+        final pendingItems = items.where((item) => !item.isPaid).toList();
+
+        if (pendingItems.isEmpty) {
           return const Center(
             child: Padding(
               padding: EdgeInsets.all(24),
               child: Text(
-                'No hay registros confirmados para calcular pagos.',
+                'No hay pagos pendientes por cancelar.',
                 textAlign: TextAlign.center,
               ),
             ),
           );
         }
 
-        final gross = items.fold(0.0, (sum, item) => sum + item.grossPayable);
-        final total = items.fold(0.0, (sum, item) => sum + item.totalPayable);
-        final missingRates = items.where((item) => item.hasMissingRates).length;
+        final gross =
+            pendingItems.fold(0.0, (sum, item) => sum + item.grossPayable);
+        final total =
+            pendingItems.fold(0.0, (sum, item) => sum + item.totalPayable);
+        final missingRates =
+            pendingItems.where((item) => item.hasMissingRates).length;
 
         return RefreshIndicator(
           onRefresh: () async => ref.invalidate(payrollSummariesProvider),
@@ -40,7 +45,7 @@ class PayrollScreen extends ConsumerWidget {
             padding: const EdgeInsets.all(16),
             children: [
               Text(
-                'Pagos estimados',
+                'Pagos pendientes',
                 style: Theme.of(context).textTheme.titleLarge,
               ),
               const SizedBox(height: 12),
@@ -55,7 +60,7 @@ class PayrollScreen extends ConsumerWidget {
                   ),
                   _MetricCard(
                     icon: Icons.payments_outlined,
-                    label: 'A pagar',
+                    label: 'Por cancelar',
                     value: money.format(total),
                   ),
                   _MetricCard(
@@ -95,7 +100,7 @@ class PayrollScreen extends ConsumerWidget {
                 label: const Text('Cerrar semana'),
               ),
               const SizedBox(height: 16),
-              for (final item in items) ...[
+              for (final item in pendingItems) ...[
                 _EmployeePayrollCard(summary: item, money: money),
                 const SizedBox(height: 12),
               ],
@@ -417,7 +422,7 @@ class _EmployeePayrollCard extends ConsumerWidget {
                       }
                     },
                     icon: const Icon(Icons.check_circle_outline),
-                    label: const Text('Pagado'),
+                    label: const Text('Marcar pagado'),
                   ),
                 ),
               ],

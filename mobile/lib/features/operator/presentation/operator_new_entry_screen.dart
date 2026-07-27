@@ -253,15 +253,26 @@ class _OperatorNewEntryScreenState
             ),
           ),
           const SizedBox(height: 16),
-          FilledButton.icon(
-            onPressed: _saving ? null : _save,
-            icon: _saving
-                ? const SizedBox.square(
-                    dimension: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.send_outlined),
-            label: Text(_saving ? 'Guardando...' : 'Enviar al gerente'),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              OutlinedButton.icon(
+                onPressed: _saving ? null : () => _save(addAnother: true),
+                icon: const Icon(Icons.add_circle_outline),
+                label: const Text('Enviar y agregar otro'),
+              ),
+              const SizedBox(height: 8),
+              FilledButton.icon(
+                onPressed: _saving ? null : _save,
+                icon: _saving
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.send_outlined),
+                label: Text(_saving ? 'Guardando...' : 'Enviar y terminar'),
+              ),
+            ],
           ),
         ],
       ),
@@ -344,7 +355,7 @@ class _OperatorNewEntryScreenState
     });
   }
 
-  Future<void> _save() async {
+  Future<void> _save({bool addAnother = false}) async {
     if (!_formKey.currentState!.validate()) return;
     final profile = await ref.read(currentProfileProvider.future);
     if (profile == null || !profile.isOperator) {
@@ -387,6 +398,25 @@ class _OperatorNewEntryScreenState
           );
       ref.invalidate(operatorEntriesProvider);
       if (!mounted) return;
+
+      if (addAnother) {
+        setState(() {
+          _employeeId = employeeId;
+          _workTypeId = null;
+          _inlineEmployee.clear();
+          _inlineWorkType.clear();
+          _quantity.clear();
+          _overtime.text = '0';
+          _note.clear();
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Trabajo enviado. Puedes agregar otro.'),
+          ),
+        );
+        return;
+      }
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Jornada enviada al gerente.')),
       );
