@@ -91,7 +91,7 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
                                         CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        employee.fullName,
+                                        '${employee.code} - ${employee.fullName}',
                                         style: Theme.of(context)
                                             .textTheme
                                             .titleMedium
@@ -102,7 +102,8 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
                                       const SizedBox(height: 6),
                                       _EmployeeInfoLine(
                                         icon: Icons.badge_outlined,
-                                        text: 'Código: ${employee.code}',
+                                        text:
+                                            'Código de pago: ${employee.code}',
                                       ),
                                       if ((employee.documentNumber ?? '')
                                           .trim()
@@ -387,9 +388,11 @@ class _EmployeeFormState extends ConsumerState<_EmployeeForm> {
                 textCapitalization: TextCapitalization.characters,
                 decoration: const InputDecoration(
                   labelText: 'Código',
+                  hintText: 'Ej: 01, 02, 03',
+                  helperText: 'Se usará para ordenar planillas y pagos.',
                   prefixIcon: Icon(Icons.badge_outlined),
                 ),
-                validator: _required,
+                validator: _codeValidator,
               ),
               const SizedBox(height: 12),
               TextFormField(
@@ -456,6 +459,15 @@ class _EmployeeFormState extends ConsumerState<_EmployeeForm> {
     return value == null || value.trim().isEmpty ? 'Requerido' : null;
   }
 
+  String? _codeValidator(String? value) {
+    final text = value?.trim();
+    if (text == null || text.isEmpty) return 'Ingresa el código de pago';
+    if (text.contains(RegExp(r'\s'))) {
+      return 'El código no debe tener espacios';
+    }
+    return null;
+  }
+
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -464,7 +476,7 @@ class _EmployeeFormState extends ConsumerState<_EmployeeForm> {
     try {
       await ref.read(employeesRepositoryProvider).save(
             id: widget.employee?.id,
-            code: _code.text,
+            code: _normalizeCode(_code.text),
             fullName: _name.text,
             documentNumber: _document.text,
             phone: _phone.text,
@@ -490,4 +502,6 @@ class _EmployeeFormState extends ConsumerState<_EmployeeForm> {
       }
     }
   }
+
+  String _normalizeCode(String value) => value.trim().toUpperCase();
 }

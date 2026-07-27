@@ -23,7 +23,6 @@ class _OperatorNewEntryScreenState
     extends ConsumerState<OperatorNewEntryScreen> {
   final _formKey = GlobalKey<FormState>();
   final _quantity = TextEditingController();
-  final _restMinutes = TextEditingController(text: '0');
   final _overtime = TextEditingController(text: '0');
   final _note = TextEditingController();
   final _inlineEmployee = TextEditingController();
@@ -39,7 +38,6 @@ class _OperatorNewEntryScreenState
   @override
   void dispose() {
     _quantity.dispose();
-    _restMinutes.dispose();
     _overtime.dispose();
     _note.dispose();
     _inlineEmployee.dispose();
@@ -188,44 +186,26 @@ class _OperatorNewEntryScreenState
                   ],
                 ),
                 const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextFormField(
-                        controller: _restMinutes,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'Descanso',
-                          suffixText: 'min',
-                          prefixIcon: Icon(Icons.free_breakfast_outlined),
-                        ),
-                        validator: (value) {
-                          final parsed = int.tryParse(value ?? '0');
-                          if (parsed == null || parsed < 0) return 'Inválido';
-                          return null;
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: TextFormField(
-                        controller: _overtime,
-                        keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true),
-                        decoration: const InputDecoration(
-                          labelText: 'Horas extra',
-                          suffixText: 'h',
-                          prefixIcon: Icon(Icons.more_time_outlined),
-                        ),
-                        validator: (value) {
-                          final parsed = double.tryParse(
-                              value?.replaceAll(',', '.') ?? '0');
-                          if (parsed == null || parsed < 0) return 'Inválido';
-                          return null;
-                        },
-                      ),
-                    ),
-                  ],
+                _AutoBreakNotice(
+                  restMinutes: _automaticRestMinutes(),
+                  grossHours: _grossWorkedHours(),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _overtime,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                    labelText: 'Horas extra',
+                    suffixText: 'h',
+                    prefixIcon: Icon(Icons.more_time_outlined),
+                  ),
+                  validator: (value) {
+                    final parsed =
+                        double.tryParse(value?.replaceAll(',', '.') ?? '0');
+                    if (parsed == null || parsed < 0) return 'Inválido';
+                    return null;
+                  },
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
@@ -273,24 +253,15 @@ class _OperatorNewEntryScreenState
             ),
           ),
           const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _saving ? null : () => _save('draft'),
-                  icon: const Icon(Icons.save_outlined),
-                  label: const Text('Borrador'),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: _saving ? null : () => _save('pending'),
-                  icon: const Icon(Icons.send_outlined),
-                  label: const Text('Enviar'),
-                ),
-              ),
-            ],
+          FilledButton.icon(
+            onPressed: _saving ? null : _save,
+            icon: _saving
+                ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.send_outlined),
+            label: Text(_saving ? 'Guardando...' : 'Enviar al gerente'),
           ),
         ],
       ),
@@ -331,7 +302,10 @@ class _OperatorNewEntryScreenState
         for (final item in items)
           DropdownMenuItem(
             value: item.id,
-            child: Text(item.fullName, overflow: TextOverflow.ellipsis),
+            child: Text(
+              '${item.code} - ${item.fullName}',
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
       ],
       onChanged: (value) => setState(() => _employeeId = value),
@@ -370,7 +344,7 @@ class _OperatorNewEntryScreenState
     });
   }
 
-  Future<void> _save(String status) async {
+  Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     final profile = await ref.read(currentProfileProvider.future);
     if (profile == null || !profile.isOperator) {
@@ -402,11 +376,11 @@ class _OperatorNewEntryScreenState
             quantity: _attendanceStatus == 'presente'
                 ? double.parse(_quantity.text.replaceAll(',', '.'))
                 : 0,
-            status: status,
+            status: 'pending',
             attendanceStatus: _attendanceStatus,
             startTime: _toParts(_startTime),
             endTime: _toParts(_endTime),
-            restMinutes: int.tryParse(_restMinutes.text) ?? 0,
+            restMinutes: _automaticRestMinutes(),
             overtimeHours:
                 double.tryParse(_overtime.text.replaceAll(',', '.')) ?? 0,
             note: _note.text,
@@ -414,11 +388,7 @@ class _OperatorNewEntryScreenState
       ref.invalidate(operatorEntriesProvider);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(status == 'draft'
-              ? 'Borrador guardado.'
-              : 'Jornada enviada al gerente.'),
-        ),
+        const SnackBar(content: Text('Jornada enviada al gerente.')),
       );
       context.go('/operator/entries');
     } catch (error) {
@@ -565,14 +535,28 @@ class _OperatorNewEntryScreenState
   }
 
   double? _calculatedNormalHours() {
+    final grossHours = _grossWorkedHours();
+    if (grossHours == null) return null;
+    final minutes = (grossHours * 60).round() - _automaticRestMinutes();
+    if (minutes <= 0) return null;
+    return minutes / 60;
+  }
+
+  double? _grossWorkedHours() {
     if (_startTime == null || _endTime == null) return null;
     final start = _startTime!.hour * 60 + _startTime!.minute;
     var end = _endTime!.hour * 60 + _endTime!.minute;
     if (end < start) end += 24 * 60;
-    final rest = int.tryParse(_restMinutes.text) ?? 0;
-    final minutes = end - start - rest;
+    final minutes = end - start;
     if (minutes <= 0) return null;
     return minutes / 60;
+  }
+
+  int _automaticRestMinutes() {
+    final grossHours = _grossWorkedHours();
+    if (_startTime == null || grossHours == null) return 0;
+    final startsInMorning = _startTime!.hour < 12;
+    return startsInMorning && grossHours > 7 ? 30 : 0;
   }
 
   TimeOfDayParts? _toParts(TimeOfDay? time) {
@@ -590,6 +574,58 @@ class _OperatorNewEntryScreenState
       'tray' => 'bandeja',
       _ => unit,
     };
+  }
+}
+
+class _AutoBreakNotice extends StatelessWidget {
+  const _AutoBreakNotice({
+    required this.restMinutes,
+    required this.grossHours,
+  });
+
+  final int restMinutes;
+  final double? grossHours;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final applied = restMinutes > 0;
+    final message = grossHours == null
+        ? 'El descanso se calculará cuando ingreses entrada y salida.'
+        : applied
+            ? 'Se descontarán 30 min automáticamente por turno de mañana mayor a 7 h.'
+            : 'Sin descuento automático de descanso para este horario.';
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: applied
+            ? colorScheme.primaryContainer
+            : colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            applied ? Icons.free_breakfast_outlined : Icons.info_outline,
+            color: applied
+                ? colorScheme.onPrimaryContainer
+                : colorScheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: applied
+                        ? colorScheme.onPrimaryContainer
+                        : colorScheme.onSurfaceVariant,
+                  ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -616,7 +652,7 @@ class _ScreenHeader extends StatelessWidget {
                   style: Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: 2),
               Text(
-                'Guarda borrador o envía la jornada al gerente.',
+                'Registra y envía la jornada al gerente.',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
@@ -821,28 +857,17 @@ class _EmployeeDialogState extends State<_EmployeeDialog> {
     if (!_formKey.currentState!.validate()) return;
 
     final fullName = _nameController.text.trim();
-    final customCode = _codeController.text.trim();
+    final customCode = _codeController.text.trim().toUpperCase();
 
     Navigator.of(context).pop(
       _EmployeeDraft(
         fullName: fullName,
-        code: customCode.isEmpty ? _codeFromName(fullName) : customCode,
+        code: customCode,
         documentNumber: _documentController.text.trim(),
         phone: _phoneController.text.trim(),
         jobTitle: _jobTitleController.text.trim(),
       ),
     );
-  }
-
-  String _codeFromName(String name) {
-    final code = name
-        .toLowerCase()
-        .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
-        .replaceAll(RegExp(r'^_|_$'), '');
-
-    return code.isEmpty
-        ? DateTime.now().millisecondsSinceEpoch.toString()
-        : code;
   }
 
   @override
@@ -864,8 +889,20 @@ class _EmployeeDialogState extends State<_EmployeeDialog> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 TextFormField(
-                  controller: _nameController,
+                  controller: _codeController,
                   autofocus: true,
+                  textCapitalization: TextCapitalization.characters,
+                  decoration: const InputDecoration(
+                    labelText: 'Código',
+                    hintText: 'Ej: 01, 02, 03',
+                    helperText: 'Código usado para planillas y pagos.',
+                    prefixIcon: Icon(Icons.badge_outlined),
+                  ),
+                  validator: _codeValidator,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _nameController,
                   textCapitalization: TextCapitalization.words,
                   decoration: const InputDecoration(
                     labelText: 'Nombre completo',
@@ -901,16 +938,6 @@ class _EmployeeDialogState extends State<_EmployeeDialog> {
                     labelText: 'Cargo',
                     prefixIcon: Icon(Icons.work_outline),
                   ),
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _codeController,
-                  textCapitalization: TextCapitalization.characters,
-                  decoration: const InputDecoration(
-                    labelText: 'Código',
-                    hintText: 'Opcional: se genera desde el nombre',
-                    prefixIcon: Icon(Icons.badge_outlined),
-                  ),
                   textInputAction: TextInputAction.done,
                   onFieldSubmitted: (_) => _submit(),
                 ),
@@ -931,6 +958,15 @@ class _EmployeeDialogState extends State<_EmployeeDialog> {
         ),
       ],
     );
+  }
+
+  String? _codeValidator(String? value) {
+    final text = value?.trim();
+    if (text == null || text.isEmpty) return 'Ingresa el código de pago';
+    if (text.contains(RegExp(r'\s'))) {
+      return 'El código no debe tener espacios';
+    }
+    return null;
   }
 }
 

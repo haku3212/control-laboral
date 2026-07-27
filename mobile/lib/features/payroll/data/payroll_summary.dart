@@ -2,6 +2,7 @@ class PayrollLine {
   const PayrollLine({
     required this.entryId,
     required this.employeeId,
+    required this.employeeCode,
     required this.employeeName,
     required this.workTypeId,
     required this.workTypeName,
@@ -13,6 +14,7 @@ class PayrollLine {
 
   final String entryId;
   final String employeeId;
+  final String employeeCode;
   final String employeeName;
   final String workTypeId;
   final String workTypeName;
@@ -28,6 +30,7 @@ class PayrollLine {
 class EmployeePayrollSummary {
   const EmployeePayrollSummary({
     required this.employeeId,
+    required this.employeeCode,
     required this.employeeName,
     required this.lines,
     required this.adjustments,
@@ -35,6 +38,7 @@ class EmployeePayrollSummary {
   });
 
   final String employeeId;
+  final String employeeCode;
   final String employeeName;
   final List<PayrollLine> lines;
   final List<PayrollAdjustment> adjustments;

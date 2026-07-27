@@ -26,7 +26,7 @@ class PayrollRepository {
     final entries = await _client
         .from('work_entries')
         .select(
-          'id, employee_id, work_type_id, work_date, quantity, employees(full_name), work_types(name, unit)',
+          'id, employee_id, work_type_id, work_date, quantity, employees(code, full_name), work_types(name, unit)',
         )
         .eq('empresa_id', empresaId)
         .eq('status', 'confirmed')
@@ -51,6 +51,7 @@ class PayrollRepository {
         PayrollLine(
           entryId: entry['id'] as String,
           employeeId: employeeId,
+          employeeCode: entry['employees']['code'] as String,
           employeeName: entry['employees']['full_name'] as String,
           workTypeId: workTypeId,
           workTypeName: entry['work_types']['name'] as String,
@@ -86,6 +87,7 @@ class PayrollRepository {
       for (final entry in grouped.entries)
         EmployeePayrollSummary(
           employeeId: entry.key,
+          employeeCode: entry.value.first.employeeCode,
           employeeName: entry.value.first.employeeName,
           lines: entry.value,
           status: payrollByEmployee[entry.key]?['status'] as String? ?? 'draft',
@@ -95,7 +97,16 @@ class PayrollRepository {
               PayrollAdjustment.fromMap(row),
           ],
         ),
-    ]..sort((a, b) => a.employeeName.compareTo(b.employeeName));
+    ]..sort((a, b) => _compareEmployeeCode(a.employeeCode, b.employeeCode));
+  }
+
+  int _compareEmployeeCode(String a, String b) {
+    final numberA = int.tryParse(a.trim());
+    final numberB = int.tryParse(b.trim());
+    if (numberA != null && numberB != null && numberA != numberB) {
+      return numberA.compareTo(numberB);
+    }
+    return a.compareTo(b);
   }
 
   Future<void> addAdjustment({

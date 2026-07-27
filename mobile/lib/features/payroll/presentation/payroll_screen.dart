@@ -198,7 +198,7 @@ class _EmployeePayrollCard extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      summary.employeeName,
+                      '${summary.employeeCode} - ${summary.employeeName}',
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     const Text('Se pagó'),
@@ -254,7 +254,7 @@ class _EmployeePayrollCard extends ConsumerWidget {
               children: [
                 Expanded(
                   child: Text(
-                    summary.employeeName,
+                    '${summary.employeeCode} - ${summary.employeeName}',
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                 ),
@@ -479,7 +479,7 @@ class _EmployeePayrollCard extends ConsumerWidget {
             title: const Text('Confirmar pago'),
             content: Text(
               'Se marcará como pagado ${money.format(summary.totalPayable)} '
-              'para ${summary.employeeName}.',
+              'para ${summary.employeeCode} - ${summary.employeeName}.',
             ),
             actions: [
               TextButton(

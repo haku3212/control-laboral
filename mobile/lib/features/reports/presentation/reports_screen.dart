@@ -31,7 +31,10 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
       data: (items) {
         final filtered = items
             .where((item) =>
-                item.employeeName.toLowerCase().contains(_query.toLowerCase()))
+                item.employeeName
+                    .toLowerCase()
+                    .contains(_query.toLowerCase()) ||
+                item.employeeCode.toLowerCase().contains(_query.toLowerCase()))
             .toList();
         final total =
             filtered.fold(0.0, (sum, item) => sum + item.totalPayable);
@@ -68,7 +71,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
             for (final item in filtered)
               Card(
                 child: ListTile(
-                  title: Text(item.employeeName),
+                  title: Text('${item.employeeCode} - ${item.employeeName}'),
                   subtitle: Text(item.isPaid ? 'Pagado' : 'Pendiente'),
                   trailing: Text(money.format(item.totalPayable)),
                 ),
@@ -142,7 +145,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
                     mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                     children: [
                       pw.Text(
-                        item.employeeName,
+                        '${item.employeeCode} - ${item.employeeName}',
                         style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
                       ),
                       pw.Text(

@@ -24,8 +24,11 @@ class EmployeesRepository {
         .select()
         .eq('empresa_id', empresaId)
         .order('active', ascending: false)
+        .order('code')
         .order('full_name');
-    return [for (final row in rows) Employee.fromMap(row)];
+    final employees = [for (final row in rows) Employee.fromMap(row)];
+    employees.sort(_compareByCode);
+    return employees;
   }
 
   Future<void> save({
@@ -138,5 +141,19 @@ class EmployeesRepository {
   String? _blankToNull(String? value) {
     final text = value?.trim();
     return text == null || text.isEmpty ? null : text;
+  }
+
+  int _compareByCode(Employee a, Employee b) {
+    if (a.active != b.active) return a.active ? -1 : 1;
+
+    final numberA = int.tryParse(a.code.trim());
+    final numberB = int.tryParse(b.code.trim());
+    if (numberA != null && numberB != null && numberA != numberB) {
+      return numberA.compareTo(numberB);
+    }
+
+    final codeCompare = a.code.compareTo(b.code);
+    if (codeCompare != 0) return codeCompare;
+    return a.fullName.compareTo(b.fullName);
   }
 }
