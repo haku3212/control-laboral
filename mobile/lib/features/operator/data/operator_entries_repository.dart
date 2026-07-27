@@ -57,11 +57,14 @@ class OperatorEntriesRepository {
         .select('id')
         .eq('empresa_id', empresaId)
         .eq('employee_id', employeeId)
+        .eq('work_type_id', workTypeId)
         .eq('work_date', _dateFormat.format(workDate))
         .neq('status', 'void')
         .limit(1);
     if (duplicated.isNotEmpty) {
-      throw StateError('Ya existe una jornada para este trabajador y fecha.');
+      throw StateError(
+        'Ya existe este trabajo para el trabajador en esa fecha.',
+      );
     }
 
     await _client.from('work_entries').insert({
