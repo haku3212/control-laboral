@@ -27,18 +27,20 @@ class OperatorEntriesScreen extends ConsumerWidget {
         }
         return RefreshIndicator(
           onRefresh: () async => ref.invalidate(operatorEntriesProvider),
-          child: ListView.separated(
+          child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-            itemCount: items.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 10),
-            itemBuilder: (context, index) {
-              final item = items[index];
-              return _OperatorEntryCard(
-                item: item,
-                date: dateFormat.format(item.workDate),
-                quantity: _formatQuantity(item.quantity),
-              );
-            },
+            children: [
+              _OperatorEntriesSummary(items: items),
+              const SizedBox(height: 12),
+              for (final item in items) ...[
+                _OperatorEntryCard(
+                  item: item,
+                  date: dateFormat.format(item.workDate),
+                  quantity: _formatQuantity(item.quantity),
+                ),
+                const SizedBox(height: 10),
+              ],
+            ],
           ),
         );
       },
@@ -49,6 +51,86 @@ class OperatorEntriesScreen extends ConsumerWidget {
     return value == value.roundToDouble()
         ? value.toStringAsFixed(0)
         : value.toStringAsFixed(2);
+  }
+}
+
+class _OperatorEntriesSummary extends StatelessWidget {
+  const _OperatorEntriesSummary({required this.items});
+
+  final List<OperatorEntry> items;
+
+  @override
+  Widget build(BuildContext context) {
+    final pending = items.where((item) => item.status == 'pending').length;
+    final confirmed = items.where((item) => item.status == 'confirmed').length;
+    final today = DateTime.now();
+    final todayCount = items.where((item) {
+      return item.workDate.year == today.year &&
+          item.workDate.month == today.month &&
+          item.workDate.day == today.day;
+    }).length;
+
+    return Card(
+      color: Theme.of(context).colorScheme.primaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Resumen de tus envíos',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onPrimaryContainer,
+                    fontWeight: FontWeight.w800,
+                  ),
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _SummaryPill(label: 'Hoy', value: '$todayCount'),
+                _SummaryPill(label: 'Pendientes', value: '$pending'),
+                _SummaryPill(label: 'Confirmados', value: '$confirmed'),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SummaryPill extends StatelessWidget {
+  const _SummaryPill({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: colorScheme.surface.withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            value,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+          ),
+          const SizedBox(width: 6),
+          Text(label),
+        ],
+      ),
+    );
   }
 }
 
@@ -68,14 +150,19 @@ class _OperatorEntryCard extends StatelessWidget {
     return Card(
       clipBehavior: Clip.antiAlias,
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
                 CircleAvatar(
-                  child: Icon(_workIcon(item.workTypeUnit)),
+                  backgroundColor:
+                      Theme.of(context).colorScheme.primaryContainer,
+                  child: Icon(
+                    _workIcon(item.workTypeUnit),
+                    color: Theme.of(context).colorScheme.onPrimaryContainer,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -99,7 +186,7 @@ class _OperatorEntryCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                _StatusChip(status: item.status),
+                Flexible(child: _StatusChip(status: item.status)),
               ],
             ),
             const SizedBox(height: 12),
@@ -116,7 +203,15 @@ class _OperatorEntryCard extends StatelessWidget {
             ),
             if (item.note != null && item.note!.trim().isNotEmpty) ...[
               const SizedBox(height: 12),
-              Text(item.note!),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(item.note!),
+              ),
             ],
           ],
         ),

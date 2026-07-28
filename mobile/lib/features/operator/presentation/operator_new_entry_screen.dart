@@ -82,9 +82,11 @@ class _OperatorNewEntryScreenState
                     prefixIcon: Icon(Icons.person_add_alt),
                   ),
                   onChanged: (value) {
-                    if (value.trim().isNotEmpty && _employeeId != null) {
-                      setState(() => _employeeId = null);
-                    }
+                    setState(() {
+                      if (value.trim().isNotEmpty && _employeeId != null) {
+                        _employeeId = null;
+                      }
+                    });
                   },
                 ),
                 Align(
@@ -112,9 +114,11 @@ class _OperatorNewEntryScreenState
                     prefixIcon: Icon(Icons.edit_note_outlined),
                   ),
                   onChanged: (value) {
-                    if (value.trim().isNotEmpty && _workTypeId != null) {
-                      setState(() => _workTypeId = null);
-                    }
+                    setState(() {
+                      if (value.trim().isNotEmpty && _workTypeId != null) {
+                        _workTypeId = null;
+                      }
+                    });
                   },
                 ),
                 Align(
@@ -206,6 +210,7 @@ class _OperatorNewEntryScreenState
                     if (parsed == null || parsed < 0) return 'Inválido';
                     return null;
                   },
+                  onChanged: (_) => setState(() {}),
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
@@ -253,6 +258,14 @@ class _OperatorNewEntryScreenState
             ),
           ),
           const SizedBox(height: 16),
+          _EntryPreview(
+            employeeLabel: _selectedEmployeeLabel(employees),
+            workTypeLabel: _selectedWorkTypeLabel(workTypes),
+            quantity: _quantity.text.trim(),
+            date: DateFormat('dd/MM/yyyy', 'es_BO').format(_workDate),
+            restMinutes: _automaticRestMinutes(),
+          ),
+          const SizedBox(height: 10),
           const _SubmitFlowHint(),
           const SizedBox(height: 10),
           Column(
@@ -323,6 +336,40 @@ class _OperatorNewEntryScreenState
       ],
       onChanged: (value) => setState(() => _employeeId = value),
     );
+  }
+
+  String _selectedEmployeeLabel(AsyncValue<List<Employee>> employees) {
+    final selectedId = _employeeId;
+    final quickName = _inlineEmployee.text.trim();
+    if (quickName.isNotEmpty) return quickName;
+    final list = employees.valueOrNull;
+    if (selectedId == null || list == null) return 'Sin trabajador';
+    Employee? selected;
+    for (final item in list) {
+      if (item.id == selectedId) {
+        selected = item;
+        break;
+      }
+    }
+    if (selected == null) return 'Sin trabajador';
+    return '${selected.code} - ${selected.fullName}';
+  }
+
+  String _selectedWorkTypeLabel(AsyncValue<List<WorkType>> workTypes) {
+    final selectedId = _workTypeId;
+    final quickName = _inlineWorkType.text.trim();
+    if (quickName.isNotEmpty) return quickName;
+    final list = workTypes.valueOrNull;
+    if (selectedId == null || list == null) return 'Sin trabajo';
+    WorkType? selected;
+    for (final item in list) {
+      if (item.id == selectedId) {
+        selected = item;
+        break;
+      }
+    }
+    if (selected == null) return 'Sin trabajo';
+    return '${selected.name} (${_unitLabel(selected.unit)})';
   }
 
   Future<void> _pickDate() async {
@@ -605,6 +652,111 @@ class _OperatorNewEntryScreenState
       'tray' => 'bandeja',
       _ => unit,
     };
+  }
+}
+
+class _EntryPreview extends StatelessWidget {
+  const _EntryPreview({
+    required this.employeeLabel,
+    required this.workTypeLabel,
+    required this.quantity,
+    required this.date,
+    required this.restMinutes,
+  });
+
+  final String employeeLabel;
+  final String workTypeLabel;
+  final String quantity;
+  final String date;
+  final int restMinutes;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final hasQuantity = quantity.isNotEmpty;
+
+    return Card(
+      color: colorScheme.surface,
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.fact_check_outlined, color: colorScheme.primary),
+                const SizedBox(width: 8),
+                Text(
+                  'Vista previa',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              employeeLabel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            Text(
+              workTypeLabel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _PreviewChip(icon: Icons.calendar_today_outlined, text: date),
+                _PreviewChip(
+                  icon: Icons.numbers,
+                  text: hasQuantity ? quantity : 'Sin cantidad',
+                ),
+                _PreviewChip(
+                  icon: Icons.free_breakfast_outlined,
+                  text: restMinutes > 0 ? '-$restMinutes min' : 'Sin descanso',
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PreviewChip extends StatelessWidget {
+  const _PreviewChip({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: colorScheme.primary),
+          const SizedBox(width: 6),
+          Text(text),
+        ],
+      ),
+    );
   }
 }
 
