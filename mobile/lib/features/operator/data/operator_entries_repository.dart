@@ -75,6 +75,37 @@ class OperatorEntriesRepository {
     });
   }
 
+  Future<void> createMany(List<OperatorEntryDraft> drafts) async {
+    if (drafts.isEmpty) return;
+
+    final userId = _client.auth.currentUser?.id;
+    final empresaId = await _empresaId();
+
+    await _client.from('work_entries').insert([
+      for (final draft in drafts)
+        {
+          'empresa_id': empresaId,
+          'employee_id': draft.employeeId,
+          'work_type_id': draft.workTypeId,
+          'work_date': _dateFormat.format(draft.workDate),
+          'quantity': draft.quantity,
+          'horas_normales': draft.quantity,
+          'horas_extra': draft.overtimeHours,
+          'estado_asistencia': draft.attendanceStatus,
+          'hora_entrada': draft.startTime?.toDatabaseValue(),
+          'hora_salida': draft.endTime?.toDatabaseValue(),
+          'minutos_descanso': draft.restMinutes,
+          'note': _blankToNull(draft.note),
+          'source': 'app',
+          'status': draft.status,
+          'registered_by': userId,
+          'creado_por': userId,
+          'modificado_por': userId,
+          'fecha_modificacion': DateTime.now().toIso8601String(),
+        },
+    ]);
+  }
+
   String? _blankToNull(String? value) {
     final text = value?.trim();
     return text == null || text.isEmpty ? null : text;
@@ -94,6 +125,34 @@ class OperatorEntriesRepository {
     }
     return empresaId;
   }
+}
+
+class OperatorEntryDraft {
+  const OperatorEntryDraft({
+    required this.employeeId,
+    required this.workTypeId,
+    required this.workDate,
+    required this.quantity,
+    required this.status,
+    required this.attendanceStatus,
+    this.startTime,
+    this.endTime,
+    this.restMinutes = 0,
+    this.overtimeHours = 0,
+    this.note,
+  });
+
+  final String employeeId;
+  final String workTypeId;
+  final DateTime workDate;
+  final double quantity;
+  final String status;
+  final String attendanceStatus;
+  final TimeOfDayParts? startTime;
+  final TimeOfDayParts? endTime;
+  final int restMinutes;
+  final double overtimeHours;
+  final String? note;
 }
 
 class TimeOfDayParts {

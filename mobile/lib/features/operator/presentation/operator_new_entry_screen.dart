@@ -33,6 +33,7 @@ class _OperatorNewEntryScreenState
   DateTime _workDate = DateTime.now();
   TimeOfDay? _startTime;
   TimeOfDay? _endTime;
+  final List<_PendingWorkLine> _pendingLines = [];
   bool _saving = false;
 
   @override
@@ -129,30 +130,35 @@ class _OperatorNewEntryScreenState
                     );
                   },
                 ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _inlineWorkType,
-                  decoration: const InputDecoration(
-                    labelText: 'Escribir trabajo rápido',
-                    hintText: 'Ej: Fundir silicato',
-                    prefixIcon: Icon(Icons.edit_note_outlined),
+                if (selectedEmployee?.restrictWorkTypes == true) ...[
+                  const SizedBox(height: 8),
+                  const _RestrictedWorkTypeNotice(),
+                ] else ...[
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _inlineWorkType,
+                    decoration: const InputDecoration(
+                      labelText: 'Escribir trabajo rápido',
+                      hintText: 'Ej: Fundir silicato',
+                      prefixIcon: Icon(Icons.edit_note_outlined),
+                    ),
+                    onChanged: (value) {
+                      setState(() {
+                        if (value.trim().isNotEmpty && _workTypeId != null) {
+                          _workTypeId = null;
+                        }
+                      });
+                    },
                   ),
-                  onChanged: (value) {
-                    setState(() {
-                      if (value.trim().isNotEmpty && _workTypeId != null) {
-                        _workTypeId = null;
-                      }
-                    });
-                  },
-                ),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton.icon(
-                    onPressed: _createWorkType,
-                    icon: const Icon(Icons.add_business_outlined),
-                    label: const Text('Agregar trabajo con unidad'),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: _createWorkType,
+                      icon: const Icon(Icons.add_business_outlined),
+                      label: const Text('Agregar trabajo con unidad'),
+                    ),
                   ),
-                ),
+                ],
               ],
             ),
           ),
@@ -290,26 +296,34 @@ class _OperatorNewEntryScreenState
             restMinutes: _automaticRestMinutes(),
           ),
           const SizedBox(height: 10),
-          const _SubmitFlowHint(),
+          _PendingWorkLinesCard(
+            lines: _pendingLines,
+            onRemove: (index) {
+              setState(() => _pendingLines.removeAt(index));
+            },
+          ),
           const SizedBox(height: 10),
           Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               OutlinedButton.icon(
-                onPressed: _saving ? null : () => _save(addAnother: true),
-                icon: const Icon(Icons.add_circle_outline),
-                label: const Text('Enviar y agregar otro'),
+                onPressed: _saving ? null : _addCurrentLine,
+                icon: const Icon(Icons.playlist_add_outlined),
+                label: const Text('Agregar linea a jornada'),
               ),
               const SizedBox(height: 8),
               FilledButton.icon(
-                onPressed: _saving ? null : _save,
+                onPressed:
+                    _saving || _pendingLines.isEmpty ? null : _submitJourney,
                 icon: _saving
                     ? const SizedBox.square(
                         dimension: 18,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.send_outlined),
-                label: Text(_saving ? 'Guardando...' : 'Enviar y terminar'),
+                label: Text(_saving
+                    ? 'Guardando...'
+                    : 'Enviar jornada (${_pendingLines.length})'),
               ),
             ],
           ),
@@ -371,6 +385,10 @@ class _OperatorNewEntryScreenState
           ),
       ],
       onChanged: (value) {
+        if (_pendingLines.isNotEmpty) {
+          _showMessage('Limpia la jornada antes de cambiar trabajador.');
+          return;
+        }
         setState(() {
           _employeeId = value;
           _workTypeId = null;
@@ -425,6 +443,10 @@ class _OperatorNewEntryScreenState
   }
 
   Future<void> _pickDate() async {
+    if (_pendingLines.isNotEmpty) {
+      _showMessage('Limpia la jornada antes de cambiar la fecha.');
+      return;
+    }
     final picked = await showDatePicker(
       context: context,
       firstDate: DateTime(2020),
@@ -456,80 +478,114 @@ class _OperatorNewEntryScreenState
     });
   }
 
-  Future<void> _save({bool addAnother = false}) async {
+  Future<void> _addCurrentLine() async {
     if (!_formKey.currentState!.validate()) return;
+
+    try {
+      final employeeLabel = _selectedEmployeeLabel(ref.read(employeesProvider));
+      final workTypeLabel = _selectedWorkTypeLabel(ref.read(workTypesProvider));
+      final employeeId = await _resolveEmployeeId();
+      final workTypeId = await _resolveWorkTypeId();
+      if (employeeId == null || workTypeId == null) {
+        _showMessage('Selecciona o escribe trabajador y trabajo.');
+        return;
+      }
+
+      final quantity = _attendanceStatus == 'presente'
+          ? double.parse(_quantity.text.replaceAll(',', '.'))
+          : 0.0;
+      final overtime =
+          double.tryParse(_overtime.text.replaceAll(',', '.')) ?? 0;
+
+      setState(() {
+        _employeeId = employeeId;
+        _pendingLines.add(
+          _PendingWorkLine(
+            draft: OperatorEntryDraft(
+              employeeId: employeeId,
+              workTypeId: workTypeId,
+              workDate: _workDate,
+              quantity: quantity,
+              status: 'pending',
+              attendanceStatus: _attendanceStatus,
+              startTime: _toParts(_startTime),
+              endTime: _toParts(_endTime),
+              restMinutes: _automaticRestMinutes(),
+              overtimeHours: overtime,
+              note: _note.text,
+            ),
+            employeeLabel: employeeLabel,
+            workTypeLabel: workTypeLabel,
+            quantityLabel: _formatQuantity(quantity),
+            restMinutes: _automaticRestMinutes(),
+            note: _note.text.trim(),
+          ),
+        );
+        _clearCurrentWorkLine();
+      });
+
+      ref.invalidate(employeesProvider);
+      ref.invalidate(workTypesProvider);
+      _showMessage('Linea agregada. Puedes sumar otro trabajo.');
+    } catch (error) {
+      _showMessage('No se pudo agregar la linea: $error');
+    }
+  }
+
+  Future<void> _submitJourney() async {
     final profile = await ref.read(currentProfileProvider.future);
     if (profile == null || !profile.isOperator) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Tu usuario no puede enviar registros.')),
-      );
+      _showMessage('Tu usuario no puede enviar registros.');
+      return;
+    }
+    if (_pendingLines.isEmpty) {
+      _showMessage('Agrega al menos una linea a la jornada.');
       return;
     }
 
     setState(() => _saving = true);
     try {
-      final employeeId = await _resolveEmployeeId();
-      final workTypeId = await _resolveWorkTypeId();
-      if (employeeId == null || workTypeId == null) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Selecciona o escribe trabajador y trabajo.'),
-          ),
-        );
-        return;
-      }
-
-      await ref.read(operatorEntriesRepositoryProvider).create(
-            employeeId: employeeId,
-            workTypeId: workTypeId,
-            workDate: _workDate,
-            quantity: _attendanceStatus == 'presente'
-                ? double.parse(_quantity.text.replaceAll(',', '.'))
-                : 0,
-            status: 'pending',
-            attendanceStatus: _attendanceStatus,
-            startTime: _toParts(_startTime),
-            endTime: _toParts(_endTime),
-            restMinutes: _automaticRestMinutes(),
-            overtimeHours:
-                double.tryParse(_overtime.text.replaceAll(',', '.')) ?? 0,
-            note: _note.text,
-          );
+      await ref.read(operatorEntriesRepositoryProvider).createMany(
+        [for (final line in _pendingLines) line.draft],
+      );
       ref.invalidate(operatorEntriesProvider);
       if (!mounted) return;
 
-      if (addAnother) {
-        setState(() {
-          _employeeId = employeeId;
-          _workTypeId = null;
-          _inlineEmployee.clear();
-          _inlineWorkType.clear();
-          _quantity.clear();
-          _overtime.text = '0';
-          _note.clear();
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Trabajo enviado. Puedes agregar otro.'),
-          ),
-        );
-        return;
-      }
-
+      setState(() {
+        _pendingLines.clear();
+        _clearCurrentWorkLine();
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Jornada enviada al gerente.')),
       );
       context.go('/operator/entries');
     } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudo guardar: $error')),
-      );
+      _showMessage('No se pudo guardar la jornada: $error');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  void _clearCurrentWorkLine() {
+    _workTypeId = null;
+    _inlineEmployee.clear();
+    _inlineWorkType.clear();
+    _quantity.clear();
+    _overtime.text = '0';
+    _note.clear();
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
+  String _formatQuantity(double value) {
+    return value == value.roundToDouble()
+        ? value.toStringAsFixed(0)
+        : value.toStringAsFixed(2);
   }
 
   Future<void> _createEmployee() async {
@@ -707,6 +763,140 @@ class _OperatorNewEntryScreenState
   }
 }
 
+class _PendingWorkLine {
+  const _PendingWorkLine({
+    required this.draft,
+    required this.employeeLabel,
+    required this.workTypeLabel,
+    required this.quantityLabel,
+    required this.restMinutes,
+    required this.note,
+  });
+
+  final OperatorEntryDraft draft;
+  final String employeeLabel;
+  final String workTypeLabel;
+  final String quantityLabel;
+  final int restMinutes;
+  final String note;
+}
+
+class _PendingWorkLinesCard extends StatelessWidget {
+  const _PendingWorkLinesCard({
+    required this.lines,
+    required this.onRemove,
+  });
+
+  final List<_PendingWorkLine> lines;
+  final void Function(int index) onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.playlist_add_check, color: colorScheme.primary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Jornada antes de enviar',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                  ),
+                ),
+                Chip(
+                  label: Text('${lines.length} lineas'),
+                  visualDensity: VisualDensity.compact,
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            if (lines.isEmpty)
+              Text(
+                'Agrega los trabajos de la jornada y revisalos antes de enviar.',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+              )
+            else
+              for (var index = 0; index < lines.length; index++) ...[
+                _PendingWorkLineTile(
+                  line: lines[index],
+                  onRemove: () => onRemove(index),
+                ),
+                if (index != lines.length - 1) const Divider(height: 18),
+              ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PendingWorkLineTile extends StatelessWidget {
+  const _PendingWorkLineTile({
+    required this.line,
+    required this.onRemove,
+  });
+
+  final _PendingWorkLine line;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                line.workTypeLabel,
+                style: Theme.of(context)
+                    .textTheme
+                    .titleSmall
+                    ?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 4),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _PreviewChip(icon: Icons.numbers, text: line.quantityLabel),
+                  _PreviewChip(
+                    icon: Icons.free_breakfast_outlined,
+                    text: line.restMinutes > 0
+                        ? '-${line.restMinutes} min'
+                        : 'Sin descanso',
+                  ),
+                ],
+              ),
+              if (line.note.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Text(line.note),
+              ],
+            ],
+          ),
+        ),
+        IconButton(
+          tooltip: 'Quitar linea',
+          onPressed: onRemove,
+          icon: const Icon(Icons.delete_outline),
+        ),
+      ],
+    );
+  }
+}
+
 class _EntryPreview extends StatelessWidget {
   const _EntryPreview({
     required this.employeeLabel,
@@ -833,39 +1023,6 @@ class _RestrictedWorkTypeNotice extends StatelessWidget {
             child: Text(
               'Este trabajador tiene trabajos asignados por gerencia.',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SubmitFlowHint extends StatelessWidget {
-  const _SubmitFlowHint();
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: colorScheme.primary.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: colorScheme.primary.withValues(alpha: 0.18)),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.playlist_add_check, color: colorScheme.primary),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              'Para una misma persona puedes enviar un trabajo y seguir agregando otros de la misma fecha.',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: colorScheme.onSurface,
                     fontWeight: FontWeight.w600,
                   ),
             ),
