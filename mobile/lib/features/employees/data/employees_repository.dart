@@ -12,6 +12,11 @@ final employeesProvider = FutureProvider<List<Employee>>((ref) {
   return ref.watch(employeesRepositoryProvider).list();
 });
 
+final employeeAllowedWorkTypeIdsProvider =
+    FutureProvider.family<Set<String>, String>((ref, employeeId) {
+  return ref.watch(employeesRepositoryProvider).allowedWorkTypeIds(employeeId);
+});
+
 class EmployeesRepository {
   EmployeesRepository(this._client);
 
@@ -31,7 +36,7 @@ class EmployeesRepository {
     return employees;
   }
 
-  Future<void> save({
+  Future<String> save({
     String? id,
     required String code,
     required String fullName,
@@ -40,6 +45,7 @@ class EmployeesRepository {
     String? jobTitle,
     String? notes,
     bool active = true,
+    bool restrictWorkTypes = false,
   }) async {
     final empresaId = await _empresaId();
     final userId = _client.auth.currentUser?.id;
@@ -53,15 +59,19 @@ class EmployeesRepository {
       'job_title': _blankToNull(jobTitle),
       'notes': _blankToNull(notes),
       'active': active,
+      'restrict_work_types': restrictWorkTypes,
       if (id == null && userId != null) 'creado_por': userId,
       if (userId != null) 'modificado_por': userId,
       'fecha_modificacion': DateTime.now().toIso8601String(),
     };
 
     if (id == null) {
-      await _client.from('employees').insert(payload);
+      final row =
+          await _client.from('employees').insert(payload).select('id').single();
+      return row['id'] as String;
     } else {
       await _client.from('employees').update(payload).eq('id', id);
+      return id;
     }
   }
 
@@ -73,6 +83,7 @@ class EmployeesRepository {
     String? jobTitle,
     String? notes,
     bool active = true,
+    bool restrictWorkTypes = false,
   }) async {
     final empresaId = await _empresaId();
     final userId = _client.auth.currentUser?.id;
@@ -86,6 +97,7 @@ class EmployeesRepository {
       'job_title': _blankToNull(jobTitle),
       'notes': _blankToNull(notes),
       'active': active,
+      'restrict_work_types': restrictWorkTypes,
       if (userId != null) 'creado_por': userId,
       if (userId != null) 'modificado_por': userId,
       'fecha_modificacion': DateTime.now().toIso8601String(),
@@ -114,6 +126,51 @@ class EmployeesRepository {
       'modificado_por': _client.auth.currentUser?.id,
       'fecha_modificacion': DateTime.now().toIso8601String(),
     }).eq('id', id);
+  }
+
+  Future<Set<String>> allowedWorkTypeIds(String employeeId) async {
+    final empresaId = await _empresaId();
+    final rows = await _client
+        .from('employee_work_types')
+        .select('work_type_id')
+        .eq('empresa_id', empresaId)
+        .eq('employee_id', employeeId);
+    return {
+      for (final row in rows) row['work_type_id'] as String,
+    };
+  }
+
+  Future<void> saveWorkTypePermissions({
+    required String employeeId,
+    required bool restrictWorkTypes,
+    required Set<String> workTypeIds,
+  }) async {
+    final empresaId = await _empresaId();
+    final userId = _client.auth.currentUser?.id;
+
+    await _client.from('employees').update({
+      'restrict_work_types': restrictWorkTypes,
+      'modificado_por': userId,
+      'fecha_modificacion': DateTime.now().toIso8601String(),
+    }).eq('id', employeeId);
+
+    await _client
+        .from('employee_work_types')
+        .delete()
+        .eq('empresa_id', empresaId)
+        .eq('employee_id', employeeId);
+
+    if (!restrictWorkTypes || workTypeIds.isEmpty) return;
+
+    await _client.from('employee_work_types').insert([
+      for (final workTypeId in workTypeIds)
+        {
+          'empresa_id': empresaId,
+          'employee_id': employeeId,
+          'work_type_id': workTypeId,
+          if (userId != null) 'creado_por': userId,
+        },
+    ]);
   }
 
   Future<String> _empresaId() async {

@@ -14,15 +14,32 @@ final payrollSummariesProvider =
   return ref.watch(payrollRepositoryProvider).summaries();
 });
 
+final payrollSummariesByRangeProvider = FutureProvider.family<
+    List<EmployeePayrollSummary>, ({DateTime startDate, DateTime endDate})>(
+  (ref, range) {
+    return ref.watch(payrollRepositoryProvider).summaries(
+          startDate: range.startDate,
+          endDate: range.endDate,
+        );
+  },
+);
+
 class PayrollRepository {
   PayrollRepository(this._client);
 
   final SupabaseClient _client;
   final _dateFormat = DateFormat('yyyy-MM-dd');
 
-  Future<List<EmployeePayrollSummary>> summaries() async {
+  Future<List<EmployeePayrollSummary>> summaries({
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
     final empresaId = await _empresaId();
     final period = await _currentPeriod();
+    final startText = _dateFormat
+        .format(startDate ?? DateTime.parse(period['start_date'] as String));
+    final endText = _dateFormat
+        .format(endDate ?? DateTime.parse(period['end_date'] as String));
     final entries = await _client
         .from('work_entries')
         .select(
@@ -30,8 +47,8 @@ class PayrollRepository {
         )
         .eq('empresa_id', empresaId)
         .eq('status', 'confirmed')
-        .gte('work_date', period['start_date'])
-        .lte('work_date', period['end_date'])
+        .gte('work_date', startText)
+        .lte('work_date', endText)
         .order('work_date', ascending: false);
 
     final rates = await _client

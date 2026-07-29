@@ -49,6 +49,10 @@ class _OperatorNewEntryScreenState
   Widget build(BuildContext context) {
     final workTypes = ref.watch(workTypesProvider);
     final employees = ref.watch(employeesProvider);
+    final selectedEmployee = _selectedEmployee(employees);
+    final allowedWorkTypeIds = selectedEmployee?.restrictWorkTypes == true
+        ? ref.watch(employeeAllowedWorkTypeIdsProvider(selectedEmployee!.id))
+        : null;
 
     return Form(
       key: _formKey,
@@ -73,37 +77,57 @@ class _OperatorNewEntryScreenState
                   data: (items) =>
                       _employeeDropdown(items.where((e) => e.active).toList()),
                 ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _inlineEmployee,
-                  decoration: const InputDecoration(
-                    labelText: 'Escribir trabajador rápido',
-                    hintText: 'Si no está en la lista',
-                    prefixIcon: Icon(Icons.person_add_alt),
+                if (selectedEmployee?.restrictWorkTypes == true) ...[
+                  const SizedBox(height: 8),
+                  const _RestrictedWorkTypeNotice(),
+                ] else ...[
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _inlineEmployee,
+                    decoration: const InputDecoration(
+                      labelText: 'Escribir trabajador rápido',
+                      hintText: 'Si no está en la lista',
+                      prefixIcon: Icon(Icons.person_add_alt),
+                    ),
+                    onChanged: (value) {
+                      setState(() {
+                        if (value.trim().isNotEmpty && _employeeId != null) {
+                          _employeeId = null;
+                        }
+                      });
+                    },
                   ),
-                  onChanged: (value) {
-                    setState(() {
-                      if (value.trim().isNotEmpty && _employeeId != null) {
-                        _employeeId = null;
-                      }
-                    });
-                  },
-                ),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton.icon(
-                    onPressed: _createEmployee,
-                    icon: const Icon(Icons.person_add_alt),
-                    label: const Text('Agregar trabajador con datos'),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: _createEmployee,
+                      icon: const Icon(Icons.person_add_alt),
+                      label: const Text('Agregar trabajador con datos'),
+                    ),
                   ),
-                ),
+                ],
                 const SizedBox(height: 8),
                 workTypes.when(
                   loading: () => const LinearProgressIndicator(),
                   error: (error, _) =>
                       Text('No se cargaron tipos de trabajo: $error'),
-                  data: (items) =>
-                      _workTypeDropdown(items.where((e) => e.active).toList()),
+                  data: (items) {
+                    final activeItems = items.where((e) => e.active).toList();
+                    if (allowedWorkTypeIds == null) {
+                      return _workTypeDropdown(activeItems);
+                    }
+                    return allowedWorkTypeIds.when(
+                      loading: () => const LinearProgressIndicator(),
+                      error: (error, _) =>
+                          Text('No se cargaron trabajos permitidos: $error'),
+                      data: (ids) => _workTypeDropdown(
+                        activeItems
+                            .where((item) => ids.contains(item.id))
+                            .toList(),
+                        restricted: true,
+                      ),
+                    );
+                  },
                 ),
                 const SizedBox(height: 8),
                 TextField(
@@ -294,13 +318,24 @@ class _OperatorNewEntryScreenState
     );
   }
 
-  Widget _workTypeDropdown(List<WorkType> items) {
+  Widget _workTypeDropdown(
+    List<WorkType> items, {
+    bool restricted = false,
+  }) {
+    final currentValue =
+        items.any((item) => item.id == _workTypeId) ? _workTypeId : null;
+
     return DropdownButtonFormField<String>(
-      initialValue: _workTypeId,
+      initialValue: currentValue,
       isExpanded: true,
       decoration: const InputDecoration(
         labelText: 'Tipo de trabajo',
         prefixIcon: Icon(Icons.work_outline),
+      ),
+      hint: Text(
+        restricted && items.isEmpty
+            ? 'Sin trabajos permitidos'
+            : 'Selecciona un trabajo',
       ),
       items: [
         for (final item in items)
@@ -312,7 +347,8 @@ class _OperatorNewEntryScreenState
             ),
           ),
       ],
-      onChanged: (value) => setState(() => _workTypeId = value),
+      onChanged:
+          items.isEmpty ? null : (value) => setState(() => _workTypeId = value),
     );
   }
 
@@ -334,8 +370,24 @@ class _OperatorNewEntryScreenState
             ),
           ),
       ],
-      onChanged: (value) => setState(() => _employeeId = value),
+      onChanged: (value) {
+        setState(() {
+          _employeeId = value;
+          _workTypeId = null;
+          _inlineWorkType.clear();
+        });
+      },
     );
+  }
+
+  Employee? _selectedEmployee(AsyncValue<List<Employee>> employees) {
+    final selectedId = _employeeId;
+    final list = employees.valueOrNull;
+    if (selectedId == null || list == null) return null;
+    for (final item in list) {
+      if (item.id == selectedId) return item;
+    }
+    return null;
   }
 
   String _selectedEmployeeLabel(AsyncValue<List<Employee>> employees) {
@@ -754,6 +806,37 @@ class _PreviewChip extends StatelessWidget {
           Icon(icon, size: 16, color: colorScheme.primary),
           const SizedBox(width: 6),
           Text(text),
+        ],
+      ),
+    );
+  }
+}
+
+class _RestrictedWorkTypeNotice extends StatelessWidget {
+  const _RestrictedWorkTypeNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: colorScheme.secondaryContainer,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.rule_folder_outlined, color: colorScheme.primary),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Este trabajador tiene trabajos asignados por gerencia.',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+          ),
         ],
       ),
     );

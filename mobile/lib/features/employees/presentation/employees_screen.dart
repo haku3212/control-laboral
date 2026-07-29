@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../shared/widgets/async_value_view.dart';
 import '../../../shared/widgets/empty_state.dart';
+import '../../work_types/data/work_type.dart';
+import '../../work_types/data/work_types_repository.dart';
 import '../data/employee.dart';
 import '../data/employees_repository.dart';
 
@@ -127,6 +129,12 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
                                           icon: Icons.work_outline,
                                           text: employee.jobTitle!,
                                         ),
+                                      _EmployeeInfoLine(
+                                        icon: Icons.rule_folder_outlined,
+                                        text: employee.restrictWorkTypes
+                                            ? 'Trabajos limitados'
+                                            : 'Todos los trabajos habilitados',
+                                      ),
                                     ],
                                   ),
                                 ),
@@ -279,6 +287,9 @@ class _EmployeeFormState extends ConsumerState<_EmployeeForm> {
   late final TextEditingController _notes;
 
   late bool _active;
+  late bool _restrictWorkTypes;
+  final Set<String> _allowedWorkTypeIds = {};
+  bool _loadingPermissions = false;
   bool _saving = false;
 
   @override
@@ -294,6 +305,11 @@ class _EmployeeFormState extends ConsumerState<_EmployeeForm> {
     _jobTitle = TextEditingController(text: employee?.jobTitle);
     _notes = TextEditingController(text: employee?.notes);
     _active = employee?.active ?? true;
+    _restrictWorkTypes = employee?.restrictWorkTypes ?? false;
+
+    if (employee != null) {
+      _loadPermissions(employee.id);
+    }
   }
 
   @override
@@ -311,6 +327,7 @@ class _EmployeeFormState extends ConsumerState<_EmployeeForm> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final workTypes = ref.watch(workTypesProvider);
 
     return Padding(
       padding: EdgeInsets.only(
@@ -432,6 +449,49 @@ class _EmployeeFormState extends ConsumerState<_EmployeeForm> {
                   setState(() => _active = value);
                 },
               ),
+              const SizedBox(height: 8),
+              Text(
+                'Trabajos permitidos',
+                style: theme.textTheme.titleMedium,
+              ),
+              const SizedBox(height: 8),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                value: _restrictWorkTypes,
+                title: const Text('Limitar trabajos para este trabajador'),
+                subtitle: Text(
+                  _restrictWorkTypes
+                      ? 'El encargado solo vera los trabajos marcados.'
+                      : 'El encargado podra elegir cualquier trabajo activo.',
+                ),
+                onChanged: (value) {
+                  setState(() => _restrictWorkTypes = value);
+                },
+              ),
+              if (_restrictWorkTypes) ...[
+                const SizedBox(height: 4),
+                if (_loadingPermissions)
+                  const LinearProgressIndicator()
+                else
+                  workTypes.when(
+                    loading: () => const LinearProgressIndicator(),
+                    error: (error, _) =>
+                        Text('No se cargaron trabajos: $error'),
+                    data: (items) => _AllowedWorkTypesPicker(
+                      items: items.where((item) => item.active).toList(),
+                      selectedIds: _allowedWorkTypeIds,
+                      onChanged: (workTypeId, selected) {
+                        setState(() {
+                          if (selected) {
+                            _allowedWorkTypeIds.add(workTypeId);
+                          } else {
+                            _allowedWorkTypeIds.remove(workTypeId);
+                          }
+                        });
+                      },
+                    ),
+                  ),
+              ],
               const SizedBox(height: 16),
               FilledButton.icon(
                 onPressed: _saving ? null : _save,
@@ -468,13 +528,30 @@ class _EmployeeFormState extends ConsumerState<_EmployeeForm> {
     return null;
   }
 
+  Future<void> _loadPermissions(String employeeId) async {
+    setState(() => _loadingPermissions = true);
+    try {
+      final ids = await ref
+          .read(employeesRepositoryProvider)
+          .allowedWorkTypeIds(employeeId);
+      if (!mounted) return;
+      setState(() {
+        _allowedWorkTypeIds
+          ..clear()
+          ..addAll(ids);
+      });
+    } finally {
+      if (mounted) setState(() => _loadingPermissions = false);
+    }
+  }
+
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _saving = true);
 
     try {
-      await ref.read(employeesRepositoryProvider).save(
+      final employeeId = await ref.read(employeesRepositoryProvider).save(
             id: widget.employee?.id,
             code: _normalizeCode(_code.text),
             fullName: _name.text,
@@ -483,6 +560,12 @@ class _EmployeeFormState extends ConsumerState<_EmployeeForm> {
             jobTitle: _jobTitle.text,
             notes: _notes.text,
             active: _active,
+            restrictWorkTypes: _restrictWorkTypes,
+          );
+      await ref.read(employeesRepositoryProvider).saveWorkTypePermissions(
+            employeeId: employeeId,
+            restrictWorkTypes: _restrictWorkTypes,
+            workTypeIds: _allowedWorkTypeIds,
           );
 
       if (mounted) {
@@ -504,4 +587,56 @@ class _EmployeeFormState extends ConsumerState<_EmployeeForm> {
   }
 
   String _normalizeCode(String value) => value.trim().toUpperCase();
+}
+
+class _AllowedWorkTypesPicker extends StatelessWidget {
+  const _AllowedWorkTypesPicker({
+    required this.items,
+    required this.selectedIds,
+    required this.onChanged,
+  });
+
+  final List<WorkType> items;
+  final Set<String> selectedIds;
+  final void Function(String workTypeId, bool selected) onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    if (items.isEmpty) {
+      return const Text('No hay trabajos activos para asignar.');
+    }
+
+    return Container(
+      constraints: const BoxConstraints(maxHeight: 260),
+      decoration: BoxDecoration(
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: ListView(
+        shrinkWrap: true,
+        children: [
+          for (final item in items)
+            CheckboxListTile(
+              dense: true,
+              value: selectedIds.contains(item.id),
+              title: Text(item.name),
+              subtitle: Text(_unitLabel(item.unit)),
+              onChanged: (value) => onChanged(item.id, value ?? false),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+String _unitLabel(String value) {
+  return switch (value) {
+    'hour' => 'Horas',
+    'unit' => 'Unidades',
+    'service' => 'Servicios',
+    'bag' => 'Bolsas',
+    'bucket' => 'Tachos',
+    'tray' => 'Bandejas',
+    _ => value,
+  };
 }

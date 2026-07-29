@@ -4,6 +4,7 @@ class Employee {
     required this.code,
     required this.fullName,
     required this.active,
+    required this.restrictWorkTypes,
     this.documentNumber,
     this.phone,
     this.jobTitle,
@@ -14,6 +15,7 @@ class Employee {
   final String code;
   final String fullName;
   final bool active;
+  final bool restrictWorkTypes;
   final String? documentNumber;
   final String? phone;
   final String? jobTitle;
@@ -25,6 +27,7 @@ class Employee {
       code: map['code'] as String,
       fullName: map['full_name'] as String,
       active: map['active'] as bool? ?? true,
+      restrictWorkTypes: map['restrict_work_types'] as bool? ?? false,
       documentNumber: map['document_number'] as String?,
       phone: map['phone'] as String?,
       jobTitle: map['job_title'] as String?,
