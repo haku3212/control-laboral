@@ -12,21 +12,38 @@ final workEntriesProvider = FutureProvider<List<WorkEntry>>((ref) {
   return ref.watch(workEntriesRepositoryProvider).list();
 });
 
+final workEntriesByDateProvider =
+    FutureProvider.family<List<WorkEntry>, DateTime>((ref, date) {
+  return ref.watch(workEntriesRepositoryProvider).list(workDate: date);
+});
+
 class WorkEntriesRepository {
   WorkEntriesRepository(this._client);
 
   final SupabaseClient _client;
 
-  Future<List<WorkEntry>> list() async {
+  Future<List<WorkEntry>> list({DateTime? workDate}) async {
     final empresaId = await _empresaId();
-    final rows = await _client
+    var query = _client
         .from('work_entries')
         .select(
-            'id, work_date, quantity, status, note, employees(full_name), work_types(name, unit)')
-        .eq('empresa_id', empresaId)
-        .order('work_date', ascending: false)
-        .limit(100);
+            'id, work_date, quantity, status, note, employees(code, full_name), work_types(name, unit)')
+        .eq('empresa_id', empresaId);
+
+    if (workDate != null) {
+      final dateText = _dateText(workDate);
+      query = query.eq('work_date', dateText);
+    }
+
+    final rows = await query.order('work_date', ascending: false).limit(100);
     return [for (final row in rows) WorkEntry.fromMap(row)];
+  }
+
+  String _dateText(DateTime date) {
+    final year = date.year.toString().padLeft(4, '0');
+    final month = date.month.toString().padLeft(2, '0');
+    final day = date.day.toString().padLeft(2, '0');
+    return '$year-$month-$day';
   }
 
   Future<void> updateStatus(String id, String status, {String? reason}) async {

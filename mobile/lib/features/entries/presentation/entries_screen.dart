@@ -7,55 +7,110 @@ import '../../../shared/widgets/empty_state.dart';
 import '../data/work_entry.dart';
 import '../data/work_entries_repository.dart';
 
-class EntriesScreen extends ConsumerWidget {
+class EntriesScreen extends ConsumerStatefulWidget {
   const EntriesScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final entries = ref.watch(workEntriesProvider);
+  ConsumerState<EntriesScreen> createState() => _EntriesScreenState();
+}
+
+class _EntriesScreenState extends ConsumerState<EntriesScreen> {
+  DateTime _selectedDate = DateTime.now();
+
+  @override
+  Widget build(BuildContext context) {
+    final entries = ref.watch(workEntriesByDateProvider(_selectedDate));
     final dateFormat = DateFormat('dd/MM/yyyy', 'es_BO');
 
     return AsyncValueView(
       value: entries,
       data: (items) {
-        if (items.isEmpty) {
-          return const EmptyState(
-            icon: Icons.assignment_outlined,
-            title: 'Sin registros',
-            message: 'Los registros enviados por el operario aparecerán aquí.',
-          );
-        }
+        final groups = _groupByEmployee(items);
 
         return RefreshIndicator(
           onRefresh: () async {
-            ref.invalidate(workEntriesProvider);
-            await ref.read(workEntriesProvider.future);
+            ref.invalidate(workEntriesByDateProvider(_selectedDate));
+            await ref.read(workEntriesByDateProvider(_selectedDate).future);
           },
-          child: ListView.separated(
+          child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-            itemCount: items.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 10),
-            itemBuilder: (context, index) {
-              final item = items[index];
-              return _EntryCard(
-                item: item,
-                date: dateFormat.format(item.workDate),
-                quantity: _formatQuantity(item.quantity),
-                onApprove: item.status == 'draft' || item.status == 'pending'
-                    ? () => _setStatus(context, ref, item.id, 'confirmed')
-                    : null,
-                onReject: item.status == 'draft' || item.status == 'pending'
-                    ? () => _reject(context, ref, item.id)
-                    : null,
-                onEdit: item.status == 'void'
-                    ? null
-                    : () => _editEntry(context, ref, item),
-              );
-            },
+            children: [
+              _DateHeader(
+                date: dateFormat.format(_selectedDate),
+                onPrevious: () => _moveDate(-1),
+                onNext: () => _moveDate(1),
+                onPick: _pickDate,
+                onToday: _setToday,
+              ),
+              const SizedBox(height: 12),
+              if (items.isEmpty)
+                const EmptyState(
+                  icon: Icons.assignment_outlined,
+                  title: 'Sin registros',
+                  message: 'No hay registros para la fecha seleccionada.',
+                )
+              else
+                for (final group in groups) ...[
+                  _EmployeeEntriesGroup(
+                    group: group,
+                    dateFormat: dateFormat,
+                    formatQuantity: _formatQuantity,
+                    onApprove: (item) =>
+                        _setStatus(context, ref, item.id, 'confirmed'),
+                    onReject: (item) => _reject(context, ref, item.id),
+                    onEdit: (item) => _editEntry(context, ref, item),
+                  ),
+                  const SizedBox(height: 10),
+                ],
+            ],
           ),
         );
       },
     );
+  }
+
+  List<_EmployeeEntryGroupData> _groupByEmployee(List<WorkEntry> items) {
+    final grouped = <String, List<WorkEntry>>{};
+    for (final item in items) {
+      grouped.putIfAbsent(item.employeeCode, () => []).add(item);
+    }
+
+    final groups = [
+      for (final entry in grouped.entries)
+        _EmployeeEntryGroupData(
+          employeeCode: entry.value.first.employeeCode,
+          employeeName: entry.value.first.employeeName,
+          items: entry.value,
+        ),
+    ];
+
+    groups.sort((a, b) => _compareEmployeeCode(a.employeeCode, b.employeeCode));
+    return groups;
+  }
+
+  void _moveDate(int days) {
+    setState(() {
+      _selectedDate = DateTime(
+        _selectedDate.year,
+        _selectedDate.month,
+        _selectedDate.day + days,
+      );
+    });
+  }
+
+  void _setToday() {
+    setState(() => _selectedDate = DateTime.now());
+  }
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+      initialDate: _selectedDate,
+    );
+    if (picked == null) return;
+    setState(() => _selectedDate = picked);
   }
 
   Future<void> _setStatus(
@@ -66,7 +121,7 @@ class EntriesScreen extends ConsumerWidget {
   ) async {
     try {
       await ref.read(workEntriesRepositoryProvider).updateStatus(id, status);
-      ref.invalidate(workEntriesProvider);
+      ref.invalidate(workEntriesByDateProvider(_selectedDate));
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -100,8 +155,7 @@ class EntriesScreen extends ConsumerWidget {
             'rejected',
             reason: reason.trim(),
           );
-
-      ref.invalidate(workEntriesProvider);
+      ref.invalidate(workEntriesByDateProvider(_selectedDate));
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -138,8 +192,7 @@ class EntriesScreen extends ConsumerWidget {
             quantity: result.quantity,
             note: result.note,
           );
-
-      ref.invalidate(workEntriesProvider);
+      ref.invalidate(workEntriesByDateProvider(_selectedDate));
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -162,8 +215,170 @@ class EntriesScreen extends ConsumerWidget {
   }
 }
 
-class _EntryCard extends StatelessWidget {
-  const _EntryCard({
+class _DateHeader extends StatelessWidget {
+  const _DateHeader({
+    required this.date,
+    required this.onPrevious,
+    required this.onNext,
+    required this.onPick,
+    required this.onToday,
+  });
+
+  final String date;
+  final VoidCallback onPrevious;
+  final VoidCallback onNext;
+  final VoidCallback onPick;
+  final VoidCallback onToday;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                IconButton(
+                  tooltip: 'Dia anterior',
+                  onPressed: onPrevious,
+                  icon: const Icon(Icons.chevron_left),
+                ),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onPick,
+                    icon: const Icon(Icons.event_outlined),
+                    label: Text(date),
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Dia siguiente',
+                  onPressed: onNext,
+                  icon: const Icon(Icons.chevron_right),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            TextButton.icon(
+              onPressed: onToday,
+              icon: const Icon(Icons.today_outlined),
+              label: const Text('Ver hoy'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _EmployeeEntryGroupData {
+  const _EmployeeEntryGroupData({
+    required this.employeeCode,
+    required this.employeeName,
+    required this.items,
+  });
+
+  final String employeeCode;
+  final String employeeName;
+  final List<WorkEntry> items;
+}
+
+class _EmployeeEntriesGroup extends StatelessWidget {
+  const _EmployeeEntriesGroup({
+    required this.group,
+    required this.dateFormat,
+    required this.formatQuantity,
+    required this.onApprove,
+    required this.onReject,
+    required this.onEdit,
+  });
+
+  final _EmployeeEntryGroupData group;
+  final DateFormat dateFormat;
+  final String Function(double value) formatQuantity;
+  final void Function(WorkEntry item) onApprove;
+  final void Function(WorkEntry item) onReject;
+  final void Function(WorkEntry item) onEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    final totalQuantity =
+        group.items.fold(0.0, (sum, item) => sum + item.quantity);
+    final pendingCount = group.items
+        .where((item) => item.status == 'draft' || item.status == 'pending')
+        .length;
+
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                CircleAvatar(child: Text(_initials(group.employeeName))),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${group.employeeCode} - ${group.employeeName}',
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                      Text(
+                        '${group.items.length} registros - '
+                        'Total: ${formatQuantity(totalQuantity)}',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ],
+                  ),
+                ),
+                if (pendingCount > 0)
+                  Chip(
+                    label: Text('$pendingCount pendientes'),
+                    avatar: const Icon(Icons.pending_actions, size: 18),
+                    visualDensity: VisualDensity.compact,
+                  ),
+              ],
+            ),
+            const Divider(height: 22),
+            for (final item in group.items) ...[
+              _EntryLine(
+                item: item,
+                date: dateFormat.format(item.workDate),
+                quantity: formatQuantity(item.quantity),
+                onApprove: item.status == 'draft' || item.status == 'pending'
+                    ? () => onApprove(item)
+                    : null,
+                onReject: item.status == 'draft' || item.status == 'pending'
+                    ? () => onReject(item)
+                    : null,
+                onEdit: item.status == 'void' ? null : () => onEdit(item),
+              ),
+              if (item != group.items.last) const Divider(height: 18),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _initials(String value) {
+    final parts = value.trim().split(RegExp(r'\s+'));
+    if (parts.isEmpty || parts.first.isEmpty) return '?';
+    if (parts.length == 1) return parts.first[0].toUpperCase();
+    return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
+  }
+}
+
+class _EntryLine extends StatelessWidget {
+  const _EntryLine({
     required this.item,
     required this.date,
     required this.quantity,
@@ -181,122 +396,73 @@ class _EntryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
           children: [
-            Row(
-              children: [
-                CircleAvatar(
-                  child: Text(_initials(item.employeeName)),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        item.employeeName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w700),
-                      ),
-                      Text(
-                        item.workTypeName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                    ],
-                  ),
-                ),
-                Flexible(child: _StatusChip(status: item.status)),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _InfoPill(icon: Icons.calendar_today_outlined, text: date),
-                _InfoPill(
-                  icon: Icons.numbers,
-                  text: '$quantity ${_unitLabel(item.unit)}',
-                ),
-              ],
-            ),
-            if (item.note != null && item.note!.trim().isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Text(item.note!),
-            ],
-            if (onApprove != null || onReject != null || onEdit != null) ...[
-              const Divider(height: 22),
-              Row(
-                children: [
-                  if (onEdit != null)
-                    IconButton.filledTonal(
-                      tooltip: 'Editar',
-                      onPressed: onEdit,
-                      icon: const Icon(Icons.edit_outlined),
-                    ),
-                  if (onEdit != null) const SizedBox(width: 8),
-                  if (onReject != null)
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: onReject,
-                        icon: const Icon(Icons.block, size: 18),
-                        label: const Text('Rechazar'),
-                        style: OutlinedButton.styleFrom(
-                          minimumSize: const Size(0, 44),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                      ),
-                    ),
-                  if (onReject != null && onApprove != null)
-                    const SizedBox(width: 8),
-                  if (onApprove != null)
-                    Expanded(
-                      child: FilledButton.icon(
-                        onPressed: onApprove,
-                        icon: const Icon(Icons.check, size: 18),
-                        label: const Text('Aprobar'),
-                        style: FilledButton.styleFrom(
-                          minimumSize: const Size(0, 44),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
+            Expanded(
+              child: Text(
+                item.workTypeName,
+                style: Theme.of(context)
+                    .textTheme
+                    .titleSmall
+                    ?.copyWith(fontWeight: FontWeight.w700),
               ),
-              const SizedBox(height: 2),
-              Text(
-                'Revisa trabajador, trabajo y cantidad antes de aprobar.',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-              ),
-            ],
+            ),
+            _StatusChip(status: item.status),
           ],
         ),
-      ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _InfoPill(icon: Icons.calendar_today_outlined, text: date),
+            _InfoPill(
+              icon: Icons.numbers,
+              text: '$quantity ${_unitLabel(item.unit)}',
+            ),
+          ],
+        ),
+        if (item.note != null && item.note!.trim().isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Text(item.note!),
+        ],
+        if (onApprove != null || onReject != null || onEdit != null) ...[
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              if (onEdit != null)
+                IconButton.filledTonal(
+                  tooltip: 'Editar',
+                  onPressed: onEdit,
+                  icon: const Icon(Icons.edit_outlined),
+                ),
+              if (onEdit != null) const SizedBox(width: 8),
+              if (onReject != null)
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onReject,
+                    icon: const Icon(Icons.block, size: 18),
+                    label: const Text('Rechazar'),
+                  ),
+                ),
+              if (onReject != null && onApprove != null)
+                const SizedBox(width: 8),
+              if (onApprove != null)
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: onApprove,
+                    icon: const Icon(Icons.check, size: 18),
+                    label: const Text('Aprobar'),
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ],
     );
-  }
-
-  String _initials(String value) {
-    final parts = value.trim().split(RegExp(r'\s+'));
-    if (parts.isEmpty || parts.first.isEmpty) return '?';
-    if (parts.length == 1) return parts.first[0].toUpperCase();
-    return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
   }
 
   String _unitLabel(String value) {
@@ -425,7 +591,7 @@ class _RejectEntryDialogState extends State<_RejectEntryDialog> {
       title: const Text('Motivo del rechazo'),
       content: TextField(
         controller: _controller,
-        decoration: const InputDecoration(labelText: 'Observación'),
+        decoration: const InputDecoration(labelText: 'Observacion'),
         minLines: 2,
         maxLines: 4,
         autofocus: true,
@@ -484,7 +650,7 @@ class _EditEntryDialogState extends State<_EditEntryDialog> {
 
     if (quantity == null || quantity <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Ingresa una cantidad u horas válida.')),
+        const SnackBar(content: Text('Ingresa una cantidad u horas valida.')),
       );
       return;
     }
@@ -546,4 +712,13 @@ class _EntryEditResult {
 
   final double quantity;
   final String note;
+}
+
+int _compareEmployeeCode(String a, String b) {
+  final numberA = int.tryParse(a.trim());
+  final numberB = int.tryParse(b.trim());
+  if (numberA != null && numberB != null && numberA != numberB) {
+    return numberA.compareTo(numberB);
+  }
+  return a.compareTo(b);
 }
