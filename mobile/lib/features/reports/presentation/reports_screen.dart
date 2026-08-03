@@ -136,6 +136,24 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
             ),
             const SizedBox(height: 8),
             _PlanillaTable(rows: planRows, money: money),
+            const SizedBox(height: 16),
+            const _SectionTitle(
+              icon: Icons.receipt_long_outlined,
+              title: 'Comprobantes por trabajador',
+            ),
+            const SizedBox(height: 8),
+            if (filtered.isEmpty)
+              const Text('Sin trabajadores para comprobante.')
+            else
+              for (final item in filtered)
+                Card(
+                  child: ListTile(
+                    title: Text('${item.employeeCode} - ${item.employeeName}'),
+                    subtitle: Text('${item.lines.length} lineas'),
+                    trailing: Text(money.format(item.totalPayable)),
+                    onTap: () => _shareEmployeePdf(item, money),
+                  ),
+                ),
           ],
         );
       },
@@ -308,6 +326,77 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
     );
   }
 
+  Future<void> _shareEmployeePdf(
+    EmployeePayrollSummary summary,
+    NumberFormat money,
+  ) async {
+    final bytes = await _buildEmployeePdf(summary, money);
+    await Printing.sharePdf(
+      bytes: bytes,
+      filename: 'comprobante-${summary.employeeCode}.pdf',
+    );
+  }
+
+  Future<Uint8List> _buildEmployeePdf(
+    EmployeePayrollSummary summary,
+    NumberFormat money,
+  ) async {
+    final rows = _employeeReceiptRows(summary);
+    final doc = pw.Document();
+    final dateFormat = DateFormat('dd/MM/yyyy', 'es_BO');
+
+    doc.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(32),
+        build: (context) => [
+          pw.Text(
+            'Resumen de pago',
+            style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
+          ),
+          pw.SizedBox(height: 6),
+          pw.Text('${summary.employeeCode} - ${summary.employeeName}'),
+          pw.Text(
+            '${dateFormat.format(_startDate)} - ${dateFormat.format(_endDate)}',
+          ),
+          pw.SizedBox(height: 16),
+          pw.TableHelper.fromTextArray(
+            headers: ['Trabajo', 'Semana 1', 'Semana 2', 'Precio/un', 'Total'],
+            data: [
+              for (final row in rows)
+                [
+                  row.workTypeName,
+                  _formatNumber(row.week1Quantity),
+                  _formatNumber(row.week2Quantity),
+                  money.format(row.rate),
+                  money.format(row.total),
+                ],
+            ],
+            headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+            headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
+            cellAlignment: pw.Alignment.centerLeft,
+          ),
+          pw.SizedBox(height: 12),
+          pw.Align(
+            alignment: pw.Alignment.centerRight,
+            child: pw.Container(
+              padding: const pw.EdgeInsets.all(10),
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(color: PdfColors.grey600),
+              ),
+              child: pw.Text(
+                'PAGO: ${money.format(summary.totalPayable)}',
+                style:
+                    pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    return doc.save();
+  }
+
   Future<Uint8List> _buildPdf(
     List<EmployeePayrollSummary> summaries,
     NumberFormat money,
@@ -407,6 +496,35 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
       ),
     );
     return doc.save();
+  }
+
+  List<_EmployeeReceiptRow> _employeeReceiptRows(
+    EmployeePayrollSummary summary,
+  ) {
+    final week1End = _startDate.add(const Duration(days: 6));
+    final grouped = <String, _EmployeeReceiptRow>{};
+
+    for (final line in summary.lines) {
+      final current = grouped[line.workTypeId] ??
+          _EmployeeReceiptRow(
+            workTypeName: line.workTypeName,
+            week1Quantity: 0,
+            week2Quantity: 0,
+            rate: line.rate ?? 0,
+            total: 0,
+          );
+      final inWeek1 = !line.workDate.isAfter(week1End);
+      grouped[line.workTypeId] = _EmployeeReceiptRow(
+        workTypeName: current.workTypeName,
+        week1Quantity: current.week1Quantity + (inWeek1 ? line.quantity : 0),
+        week2Quantity: current.week2Quantity + (inWeek1 ? 0 : line.quantity),
+        rate: line.rate ?? current.rate,
+        total: current.total + (line.subtotal ?? 0),
+      );
+    }
+
+    return grouped.values.toList()
+      ..sort((a, b) => a.workTypeName.compareTo(b.workTypeName));
   }
 }
 
@@ -613,6 +731,22 @@ class _PlanillaRow {
   final double? subtotal;
 }
 
+class _EmployeeReceiptRow {
+  const _EmployeeReceiptRow({
+    required this.workTypeName,
+    required this.week1Quantity,
+    required this.week2Quantity,
+    required this.rate,
+    required this.total,
+  });
+
+  final String workTypeName;
+  final double week1Quantity;
+  final double week2Quantity;
+  final double rate;
+  final double total;
+}
+
 int _compareEmployeeCode(String a, String b) {
   final numberA = int.tryParse(a.trim());
   final numberB = int.tryParse(b.trim());
@@ -620,6 +754,12 @@ int _compareEmployeeCode(String a, String b) {
     return numberA.compareTo(numberB);
   }
   return a.compareTo(b);
+}
+
+String _formatNumber(double value) {
+  return value == value.roundToDouble()
+      ? value.toStringAsFixed(0)
+      : value.toStringAsFixed(2);
 }
 
 String _unitLabel(String value) {

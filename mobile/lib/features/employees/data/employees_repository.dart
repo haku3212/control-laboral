@@ -17,6 +17,11 @@ final employeeAllowedWorkTypeIdsProvider =
   return ref.watch(employeesRepositoryProvider).allowedWorkTypeIds(employeeId);
 });
 
+final employeeAllowedWorkTypeIdsMapProvider =
+    FutureProvider<Map<String, Set<String>>>((ref) {
+  return ref.watch(employeesRepositoryProvider).allowedWorkTypeIdsMap();
+});
+
 class EmployeesRepository {
   EmployeesRepository(this._client);
 
@@ -138,6 +143,21 @@ class EmployeesRepository {
     return {
       for (final row in rows) row['work_type_id'] as String,
     };
+  }
+
+  Future<Map<String, Set<String>>> allowedWorkTypeIdsMap() async {
+    final empresaId = await _empresaId();
+    final rows = await _client
+        .from('employee_work_types')
+        .select('employee_id, work_type_id')
+        .eq('empresa_id', empresaId);
+    final map = <String, Set<String>>{};
+    for (final row in rows) {
+      final employeeId = row['employee_id'] as String;
+      final workTypeId = row['work_type_id'] as String;
+      map.putIfAbsent(employeeId, () => <String>{}).add(workTypeId);
+    }
+    return map;
   }
 
   Future<void> saveWorkTypePermissions({
