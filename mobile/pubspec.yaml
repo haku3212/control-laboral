@@ -1,7 +1,7 @@
 name: control_laboral_ai
 description: Aplicacion Android para administrar registros laborales con Supabase.
 publish_to: "none"
-version: 0.6.0+8
+version: 0.5.1+7
 
 environment:
   sdk: ">=3.4.0 <4.0.0"
@@ -13,7 +13,6 @@ dependencies:
     sdk: flutter
   cupertino_icons: ^1.0.8
   excel: ^4.0.6
-  file_picker: ^8.1.7
   flutter_riverpod: ^2.5.1
   flutter_secure_storage: ^9.2.2
   go_router: ^14.2.7

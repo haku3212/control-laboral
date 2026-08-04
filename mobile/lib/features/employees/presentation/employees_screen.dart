@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:excel/excel.dart' as xl;
-import 'package:file_picker/file_picker.dart';
 
 import '../../../shared/widgets/async_value_view.dart';
 import '../../../shared/widgets/empty_state.dart';
@@ -23,33 +21,21 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
   @override
   Widget build(BuildContext context) {
     final employees = ref.watch(employeesProvider);
-    final currentEmployees = employees.valueOrNull ?? const <Employee>[];
 
     return Scaffold(
       body: Column(
         children: [
           Padding(
             padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                TextField(
-                  decoration: const InputDecoration(
-                    labelText: 'Buscar trabajador',
-                    hintText: 'Nombre, código, CI o teléfono',
-                    prefixIcon: Icon(Icons.search),
-                  ),
-                  onChanged: (value) {
-                    setState(() => _query = value.toLowerCase().trim());
-                  },
-                ),
-                const SizedBox(height: 10),
-                OutlinedButton.icon(
-                  onPressed: () => _importFromExcel(currentEmployees),
-                  icon: const Icon(Icons.upload_file_outlined),
-                  label: const Text('Importar trabajadores desde Excel'),
-                ),
-              ],
+            child: TextField(
+              decoration: const InputDecoration(
+                labelText: 'Buscar trabajador',
+                hintText: 'Nombre, código, CI o teléfono',
+                prefixIcon: Icon(Icons.search),
+              ),
+              onChanged: (value) {
+                setState(() => _query = value.toLowerCase().trim());
+              },
             ),
           ),
           Expanded(
@@ -220,147 +206,6 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
     ref.invalidate(employeesProvider);
   }
 
-  Future<void> _importFromExcel(List<Employee> existingEmployees) async {
-    final picked = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['xlsx'],
-      withData: true,
-    );
-    final bytes = picked?.files.single.bytes;
-    if (bytes == null) return;
-
-    try {
-      final rows = _parseEmployeeRows(bytes, existingEmployees);
-      if (!mounted) return;
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (_) => _EmployeeImportPreviewDialog(rows: rows),
-      );
-      if (confirmed != true) return;
-
-      final validRows = rows.where((row) => row.canImport).toList();
-      if (validRows.isEmpty) {
-        _showMessage('No hay trabajadores validos para importar.');
-        return;
-      }
-
-      for (final row in validRows) {
-        await ref.read(employeesRepositoryProvider).saveReturning(
-              code: row.code,
-              fullName: row.fullName,
-              documentNumber: row.documentNumber,
-              phone: row.phone,
-              jobTitle: row.jobTitle,
-              active: true,
-            );
-      }
-
-      ref.invalidate(employeesProvider);
-      _showMessage('Importados: ${validRows.length} trabajadores.');
-    } catch (error) {
-      _showMessage('No se pudo leer el Excel: $error');
-    }
-  }
-
-  List<_EmployeeImportRow> _parseEmployeeRows(
-    List<int> bytes,
-    List<Employee> existingEmployees,
-  ) {
-    final excel = xl.Excel.decodeBytes(bytes);
-    if (excel.tables.isEmpty) return [];
-    final sheet = excel.tables.values.first;
-    if (sheet.rows.isEmpty) return [];
-
-    final headers = [
-      for (final cell in sheet.rows.first) _cellText(cell).toLowerCase(),
-    ];
-    final codeIndex = _findHeader(headers, ['codigo', 'código', 'code']);
-    final nameIndex = _findHeader(headers, ['nombre', 'trabajador', 'name']);
-    final ciIndex = _findHeader(headers, ['ci', 'documento', 'cedula']);
-    final phoneIndex =
-        _findHeader(headers, ['telefono', 'teléfono', 'celular']);
-    final jobIndex = _findHeader(headers, ['cargo', 'puesto']);
-
-    if (codeIndex == -1 || nameIndex == -1) {
-      throw StateError('El Excel debe tener columnas codigo y nombre.');
-    }
-
-    final existingCodes = {
-      for (final item in existingEmployees) item.code.trim().toUpperCase(),
-    };
-    final seenCodes = <String>{};
-    final parsed = <_EmployeeImportRow>[];
-
-    for (var rowIndex = 1; rowIndex < sheet.rows.length; rowIndex++) {
-      final row = sheet.rows[rowIndex];
-      final code = _cellAt(row, codeIndex).toUpperCase();
-      final name = _cellAt(row, nameIndex);
-      final document = ciIndex == -1 ? '' : _cellAt(row, ciIndex);
-      final phone = phoneIndex == -1 ? '' : _cellAt(row, phoneIndex);
-      final job = jobIndex == -1 ? '' : _cellAt(row, jobIndex);
-
-      if (code.isEmpty && name.isEmpty) continue;
-
-      String? error;
-      if (code.isEmpty) {
-        error = 'Falta codigo';
-      } else if (name.isEmpty) {
-        error = 'Falta nombre';
-      } else if (existingCodes.contains(code)) {
-        error = 'Codigo ya existe';
-      } else if (!seenCodes.add(code)) {
-        error = 'Codigo repetido en Excel';
-      }
-
-      parsed.add(
-        _EmployeeImportRow(
-          rowNumber: rowIndex + 1,
-          code: code,
-          fullName: name,
-          documentNumber: document,
-          phone: phone,
-          jobTitle: job,
-          error: error,
-        ),
-      );
-    }
-
-    return parsed;
-  }
-
-  int _findHeader(List<String> headers, List<String> names) {
-    for (var index = 0; index < headers.length; index++) {
-      final header = headers[index].trim();
-      if (names.any((name) => header == name || header.contains(name))) {
-        return index;
-      }
-    }
-    return -1;
-  }
-
-  String _cellAt(List<xl.Data?> row, int index) {
-    if (index < 0 || index >= row.length) return '';
-    return _cellText(row[index]);
-  }
-
-  String _cellText(xl.Data? cell) {
-    final value = cell?.value;
-    if (value == null) return '';
-    try {
-      final dynamic dynamicValue = value;
-      return '${dynamicValue.value}'.trim();
-    } catch (_) {
-      return '$value'.trim();
-    }
-  }
-
-  void _showMessage(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
-  }
-
   Future<bool> _confirmDeactivate(
     BuildContext context,
     String employeeName,
@@ -386,94 +231,6 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
           ),
         ) ??
         false;
-  }
-}
-
-class _EmployeeImportRow {
-  const _EmployeeImportRow({
-    required this.rowNumber,
-    required this.code,
-    required this.fullName,
-    required this.documentNumber,
-    required this.phone,
-    required this.jobTitle,
-    required this.error,
-  });
-
-  final int rowNumber;
-  final String code;
-  final String fullName;
-  final String documentNumber;
-  final String phone;
-  final String jobTitle;
-  final String? error;
-
-  bool get canImport => error == null;
-}
-
-class _EmployeeImportPreviewDialog extends StatelessWidget {
-  const _EmployeeImportPreviewDialog({required this.rows});
-
-  final List<_EmployeeImportRow> rows;
-
-  @override
-  Widget build(BuildContext context) {
-    final validCount = rows.where((row) => row.canImport).length;
-    final errorCount = rows.length - validCount;
-
-    return AlertDialog(
-      title: const Text('Vista previa de importacion'),
-      content: SizedBox(
-        width: 520,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text('Listos: $validCount   Con error: $errorCount'),
-            const SizedBox(height: 10),
-            Flexible(
-              child: ListView.separated(
-                shrinkWrap: true,
-                itemCount: rows.length,
-                separatorBuilder: (_, __) => const Divider(height: 1),
-                itemBuilder: (context, index) {
-                  final row = rows[index];
-                  return ListTile(
-                    dense: true,
-                    leading: Icon(
-                      row.canImport
-                          ? Icons.check_circle_outline
-                          : Icons.error_outline,
-                      color: row.canImport
-                          ? Theme.of(context).colorScheme.primary
-                          : Theme.of(context).colorScheme.error,
-                    ),
-                    title: Text('${row.code} - ${row.fullName}'),
-                    subtitle: Text(
-                      row.canImport
-                          ? 'Fila ${row.rowNumber}'
-                          : 'Fila ${row.rowNumber}: ${row.error}',
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('Cancelar'),
-        ),
-        FilledButton.icon(
-          onPressed:
-              validCount == 0 ? null : () => Navigator.of(context).pop(true),
-          icon: const Icon(Icons.save_outlined),
-          label: Text('Importar $validCount'),
-        ),
-      ],
-    );
   }
 }
 
