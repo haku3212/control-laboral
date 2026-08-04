@@ -21,6 +21,7 @@ class OperatorNewEntryScreen extends ConsumerStatefulWidget {
 class _OperatorNewEntryScreenState
     extends ConsumerState<OperatorNewEntryScreen> {
   DateTime _workDate = DateTime.now();
+  String? _employeeId;
   bool _saving = false;
 
   final Map<String, TextEditingController> _quantityControllers = {};
@@ -79,48 +80,72 @@ class _OperatorNewEntryScreenState
                   );
                 }
 
+                final selectedEmployee = _selectedEmployee(activeEmployees);
+                final selectedWorkTypes = selectedEmployee == null
+                    ? const <WorkType>[]
+                    : _allowedWorkTypes(
+                        selectedEmployee,
+                        activeWorkTypes,
+                        permissionMap,
+                      );
+
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    for (final employee in activeEmployees) ...[
+                    _EmployeePicker(
+                      employees: activeEmployees,
+                      employeeId: _employeeId,
+                      onChanged: (value) {
+                        setState(() {
+                          _employeeId = value;
+                          _clearAll();
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    if (selectedEmployee == null)
+                      const _SimpleNotice(
+                        icon: Icons.person_search_outlined,
+                        title: 'Selecciona trabajador',
+                        message:
+                            'Primero elige un trabajador para ver sus trabajos asignados.',
+                      )
+                    else ...[
                       _EmployeeSheetSection(
-                        employee: employee,
-                        workTypes: _allowedWorkTypes(
-                          employee,
-                          activeWorkTypes,
-                          permissionMap,
-                        ),
-                        quantityController: (workTypeId) =>
-                            _quantityController(employee.id, workTypeId),
-                        noteController: _noteController(employee.id),
-                        startTime: _startTimes[employee.id],
-                        endTime: _endTimes[employee.id],
-                        restMinutes: _automaticRestMinutes(employee.id),
+                        employee: selectedEmployee,
+                        workTypes: selectedWorkTypes,
+                        quantityController: (workTypeId) => _quantityController(
+                            selectedEmployee.id, workTypeId),
+                        noteController: _noteController(selectedEmployee.id),
+                        startTime: _startTimes[selectedEmployee.id],
+                        endTime: _endTimes[selectedEmployee.id],
+                        restMinutes: _automaticRestMinutes(selectedEmployee.id),
                         onPickStart: () =>
-                            _pickTime(employee.id, isStart: true),
-                        onPickEnd: () => _pickTime(employee.id, isStart: false),
-                        onClear: () => _clearEmployee(employee.id),
+                            _pickTime(selectedEmployee.id, isStart: true),
+                        onPickEnd: () =>
+                            _pickTime(selectedEmployee.id, isStart: false),
+                        onClear: () => _clearEmployee(selectedEmployee.id),
                       ),
                       const SizedBox(height: 12),
-                    ],
-                    FilledButton.icon(
-                      onPressed: _saving
-                          ? null
-                          : () => _submitSheet(
-                                activeEmployees,
-                                activeWorkTypes,
-                                permissionMap,
-                              ),
-                      icon: _saving
-                          ? const SizedBox.square(
-                              dimension: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.send_outlined),
-                      label: Text(
-                        _saving ? 'Guardando...' : 'Guardar planilla diaria',
+                      FilledButton.icon(
+                        onPressed: _saving
+                            ? null
+                            : () => _submitSheet(
+                                  selectedEmployee,
+                                  selectedWorkTypes,
+                                ),
+                        icon: _saving
+                            ? const SizedBox.square(
+                                dimension: 18,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.send_outlined),
+                        label: Text(
+                          _saving ? 'Guardando...' : 'Guardar trabajador',
+                        ),
                       ),
-                    ),
+                    ],
                   ],
                 );
               },
@@ -129,6 +154,15 @@ class _OperatorNewEntryScreenState
         ),
       ],
     );
+  }
+
+  Employee? _selectedEmployee(List<Employee> activeEmployees) {
+    final employeeId = _employeeId;
+    if (employeeId == null) return null;
+    for (final employee in activeEmployees) {
+      if (employee.id == employeeId) return employee;
+    }
+    return null;
   }
 
   List<WorkType> _allowedWorkTypes(
@@ -189,9 +223,8 @@ class _OperatorNewEntryScreenState
   }
 
   Future<void> _submitSheet(
-    List<Employee> employees,
-    List<WorkType> activeWorkTypes,
-    Map<String, Set<String>> permissionMap,
+    Employee employee,
+    List<WorkType> workTypes,
   ) async {
     final profile = await ref.read(currentProfileProvider.future);
     if (profile == null || !profile.isOperator) {
@@ -200,41 +233,34 @@ class _OperatorNewEntryScreenState
     }
 
     final drafts = <OperatorEntryDraft>[];
-    for (final employee in employees) {
-      final allowedWorkTypes = _allowedWorkTypes(
-        employee,
-        activeWorkTypes,
-        permissionMap,
+    final note = _noteController(employee.id).text;
+    final startTime = _toParts(_startTimes[employee.id]);
+    final endTime = _toParts(_endTimes[employee.id]);
+    final restMinutes = _automaticRestMinutes(employee.id);
+
+    for (final workType in workTypes) {
+      final controller = _quantityController(employee.id, workType.id);
+      final quantity = _parseQuantity(controller.text);
+      if (quantity == null || quantity <= 0) continue;
+
+      drafts.add(
+        OperatorEntryDraft(
+          employeeId: employee.id,
+          workTypeId: workType.id,
+          workDate: _workDate,
+          quantity: quantity,
+          status: 'pending',
+          attendanceStatus: 'presente',
+          startTime: startTime,
+          endTime: endTime,
+          restMinutes: restMinutes,
+          note: note,
+        ),
       );
-      final note = _noteController(employee.id).text;
-      final startTime = _toParts(_startTimes[employee.id]);
-      final endTime = _toParts(_endTimes[employee.id]);
-      final restMinutes = _automaticRestMinutes(employee.id);
-
-      for (final workType in allowedWorkTypes) {
-        final controller = _quantityController(employee.id, workType.id);
-        final quantity = _parseQuantity(controller.text);
-        if (quantity == null || quantity <= 0) continue;
-
-        drafts.add(
-          OperatorEntryDraft(
-            employeeId: employee.id,
-            workTypeId: workType.id,
-            workDate: _workDate,
-            quantity: quantity,
-            status: 'pending',
-            attendanceStatus: 'presente',
-            startTime: startTime,
-            endTime: endTime,
-            restMinutes: restMinutes,
-            note: note,
-          ),
-        );
-      }
     }
 
     if (drafts.isEmpty) {
-      _showMessage('Llena al menos una casilla con cantidad.');
+      _showMessage('Llena al menos una casilla de ${employee.fullName}.');
       return;
     }
 
@@ -245,7 +271,9 @@ class _OperatorNewEntryScreenState
       if (!mounted) return;
       _clearAll();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Planilla enviada: ${drafts.length} lineas.')),
+        SnackBar(
+            content: Text(
+                '${employee.fullName}: ${drafts.length} lineas enviadas.')),
       );
       context.go('/operator/entries');
     } catch (error) {
@@ -354,6 +382,47 @@ class _SheetHeader extends StatelessWidget {
               label: Text(date),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _EmployeePicker extends StatelessWidget {
+  const _EmployeePicker({
+    required this.employees,
+    required this.employeeId,
+    required this.onChanged,
+  });
+
+  final List<Employee> employees;
+  final String? employeeId;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: DropdownButtonFormField<String>(
+          initialValue: employeeId,
+          isExpanded: true,
+          decoration: const InputDecoration(
+            labelText: 'Trabajador',
+            helperText: 'Elige uno para llenar sus trabajos asignados.',
+            prefixIcon: Icon(Icons.person_outline),
+          ),
+          items: [
+            for (final employee in employees)
+              DropdownMenuItem(
+                value: employee.id,
+                child: Text(
+                  '${employee.code} - ${employee.fullName}',
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+          ],
+          onChanged: onChanged,
         ),
       ),
     );
