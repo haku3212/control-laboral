@@ -66,9 +66,9 @@ class DashboardScreen extends ConsumerWidget {
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
         children: [
           _DashboardHeader(
-            title: 'Panel gerente',
+            title: 'Hola, gerente',
             subtitle:
-                'Semana ${format.format(weekStart)} al ${format.format(weekEnd)}',
+                'Semana del ${format.format(weekStart)} al ${format.format(weekEnd)}',
             onRefresh: () => ref.invalidate(dashboardStatsProvider),
           ),
           const SizedBox(height: 12),
@@ -124,20 +124,20 @@ class DashboardScreen extends ConsumerWidget {
           const SizedBox(height: 8),
           _ActionTile(
             icon: Icons.fact_check_outlined,
-            title: 'Revisar jornadas',
-            subtitle: 'Aprobar, corregir o rechazar registros',
+            title: 'Revisar registros',
+            subtitle: 'Aprobar o corregir lo enviado por el encargado',
             onTap: () => context.go('/entries'),
           ),
           _ActionTile(
             icon: Icons.payments_outlined,
-            title: 'Pagos estimados',
-            subtitle: 'Ver faltantes, ajustes y pagos',
+            title: 'Ver pagos',
+            subtitle: 'Totales por trabajador y pagos por cancelar',
             onTap: () => context.go('/payroll'),
           ),
           _ActionTile(
             icon: Icons.table_view_outlined,
-            title: 'Reportes',
-            subtitle: 'Exportar PDF y planillas',
+            title: 'Planillas y comprobantes',
+            subtitle: 'PDF, Excel y resumen para cada trabajador',
             onTap: () => context.go('/reports'),
           ),
         ],

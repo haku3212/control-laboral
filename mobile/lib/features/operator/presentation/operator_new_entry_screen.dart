@@ -342,7 +342,7 @@ class _SheetHeader extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Llena casillas y guarda todo junto.',
+                    'Toca una casilla, escribe la cantidad y guarda todo junto.',
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                 ],
@@ -392,7 +392,7 @@ class _EmployeeSheetSection extends StatelessWidget {
     return Card(
       clipBehavior: Clip.antiAlias,
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -415,7 +415,7 @@ class _EmployeeSheetSection extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             if (workTypes.isEmpty)
               Text(
                 'Sin trabajos permitidos.',
@@ -427,9 +427,9 @@ class _EmployeeSheetSection extends StatelessWidget {
                   workType: workType,
                   controller: quantityController(workType.id),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 10),
               ],
-            const SizedBox(height: 4),
+            const SizedBox(height: 8),
             Row(
               children: [
                 Expanded(
@@ -509,11 +509,14 @@ class _WorkQuantityField extends StatelessWidget {
         ),
         const SizedBox(width: 12),
         SizedBox(
-          width: 116,
+          width: 132,
           child: TextField(
             controller: controller,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
             decoration: InputDecoration(
               hintText: '0',
               suffixText: _unitLabel(workType.unit),

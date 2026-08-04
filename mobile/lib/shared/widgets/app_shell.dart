@@ -13,19 +13,35 @@ class AppShell extends ConsumerWidget {
   static const _adminDestinations = [
     _Destination('/dashboard', Icons.home_outlined, Icons.home, 'Inicio'),
     _Destination(
-        '/entries', Icons.assignment_outlined, Icons.assignment, 'Registros'),
+      '/entries',
+      Icons.assignment_outlined,
+      Icons.assignment,
+      'Registros',
+    ),
     _Destination('/payroll', Icons.payments_outlined, Icons.payments, 'Pagos'),
     _Destination(
-        '/reports', Icons.bar_chart_outlined, Icons.bar_chart, 'Reportes'),
-    _Destination('/more', Icons.more_horiz, Icons.more, 'Más'),
+      '/reports',
+      Icons.bar_chart_outlined,
+      Icons.bar_chart,
+      'Reportes',
+    ),
+    _Destination('/more', Icons.more_horiz, Icons.more, 'Mas'),
   ];
 
   static const _operatorDestinations = [
     _Destination('/operator', Icons.home_outlined, Icons.home, 'Inicio'),
     _Destination(
-        '/operator/new', Icons.add_task_outlined, Icons.add_task, 'Registrar'),
-    _Destination('/operator/entries', Icons.history_outlined, Icons.history,
-        'Mis registros'),
+      '/operator/new',
+      Icons.table_view_outlined,
+      Icons.table_view,
+      'Planilla',
+    ),
+    _Destination(
+      '/operator/entries',
+      Icons.history_outlined,
+      Icons.history,
+      'Enviados',
+    ),
   ];
 
   @override
@@ -53,13 +69,16 @@ class AppShell extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          profile?.isOperator == true ? 'Encargado' : 'Control Laboral',
+          profile?.isOperator == true ? 'Planilla diaria' : 'Panel gerente',
         ),
         actions: [
-          IconButton(
-            tooltip: 'Cerrar sesión',
-            icon: const Icon(Icons.logout),
-            onPressed: () => Supabase.instance.client.auth.signOut(),
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: IconButton.filledTonal(
+              tooltip: 'Cerrar sesion',
+              icon: const Icon(Icons.logout),
+              onPressed: () => Supabase.instance.client.auth.signOut(),
+            ),
           ),
         ],
       ),
