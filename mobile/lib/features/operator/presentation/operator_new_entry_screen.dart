@@ -355,31 +355,46 @@ class _SheetHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Row(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
+            Row(
+              children: [
+                const Icon(Icons.table_view_outlined),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
                     'Planilla diaria',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
                           fontWeight: FontWeight.w800,
                         ),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Toca una casilla, escribe la cantidad y guarda todo junto.',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
-            OutlinedButton.icon(
-              onPressed: onPickDate,
-              icon: const Icon(Icons.calendar_month_outlined),
-              label: Text(date),
+            const SizedBox(height: 6),
+            Text(
+              'Toca una casilla, escribe la cantidad y guarda todo junto.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minWidth: 210),
+                child: OutlinedButton.icon(
+                  onPressed: onPickDate,
+                  icon: const Icon(Icons.calendar_month_outlined),
+                  label: Text(
+                    date,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
             ),
           ],
         ),
