@@ -142,7 +142,11 @@ class _OperatorNewEntryScreenState
                               )
                             : const Icon(Icons.send_outlined),
                         label: Text(
-                          _saving ? 'Guardando...' : 'Guardar trabajador',
+                          _saving
+                              ? 'Guardando...'
+                              : 'Enviar planilla de ${selectedEmployee.fullName}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
@@ -416,28 +420,44 @@ class _EmployeePicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: DropdownButtonFormField<String>(
-          initialValue: employeeId,
-          isExpanded: true,
-          decoration: const InputDecoration(
-            labelText: 'Trabajador',
-            helperText: 'Elige uno para llenar sus trabajos asignados.',
-            prefixIcon: Icon(Icons.person_outline),
-          ),
-          items: [
-            for (final employee in employees)
-              DropdownMenuItem(
-                value: employee.id,
-                child: Text(
-                  '${employee.code} - ${employee.fullName}',
-                  overflow: TextOverflow.ellipsis,
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              '1. Elige trabajador',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 10),
+            DropdownButtonFormField<String>(
+              initialValue: employeeId,
+              isExpanded: true,
+              iconSize: 32,
+              decoration: InputDecoration(
+                labelText: 'Trabajador',
+                helperText: 'Despues veras solo sus trabajos asignados.',
+                prefixIcon: Icon(
+                  Icons.person_outline,
+                  color: colorScheme.primary,
                 ),
               ),
+              items: [
+                for (final employee in employees)
+                  DropdownMenuItem(
+                    value: employee.id,
+                    child: Text(
+                      '${employee.code} - ${employee.fullName}',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+              ],
+              onChanged: onChanged,
+            ),
           ],
-          onChanged: onChanged,
         ),
       ),
     );
@@ -480,26 +500,57 @@ class _EmployeeSheetSection extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              children: [
-                CircleAvatar(child: Text(_initials(employee.fullName))),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    '${employee.code} - ${employee.fullName}',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w800,
-                        ),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: colorScheme.primaryContainer.withValues(alpha: 0.75),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: colorScheme.primaryContainer),
+              ),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 24,
+                    backgroundColor: colorScheme.primary,
+                    foregroundColor: colorScheme.onPrimary,
+                    child: Text(_initials(employee.fullName)),
                   ),
-                ),
-                IconButton(
-                  tooltip: 'Limpiar trabajador',
-                  onPressed: onClear,
-                  icon: const Icon(Icons.cleaning_services_outlined),
-                ),
-              ],
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          employee.fullName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style:
+                              Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Codigo ${employee.code}',
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton.filledTonal(
+                    tooltip: 'Limpiar trabajador',
+                    onPressed: onClear,
+                    icon: const Icon(Icons.cleaning_services_outlined),
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 16),
+            Text(
+              '2. Llena sus trabajos',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 10),
             if (workTypes.isEmpty)
               Text(
                 'Sin trabajos permitidos.',
@@ -513,6 +564,11 @@ class _EmployeeSheetSection extends StatelessWidget {
                 ),
                 const SizedBox(height: 10),
               ],
+            const SizedBox(height: 10),
+            Text(
+              '3. Horas opcionales',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
             const SizedBox(height: 8),
             Row(
               children: [
@@ -540,17 +596,37 @@ class _EmployeeSheetSection extends StatelessWidget {
               ],
             ),
             if (restMinutes > 0) ...[
-              const SizedBox(height: 8),
-              Text(
-                'Descanso automatico: $restMinutes min',
-                style: TextStyle(color: colorScheme.primary),
+              const SizedBox(height: 10),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: colorScheme.secondaryContainer,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.timer_outlined),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Descanso automatico: $restMinutes min',
+                        style: TextStyle(
+                          color: colorScheme.onSecondaryContainer,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             TextField(
               controller: noteController,
               minLines: 1,
               maxLines: 3,
+              textInputAction: TextInputAction.done,
               decoration: const InputDecoration(
                 labelText: 'Nota opcional',
                 prefixIcon: Icon(Icons.notes_outlined),
@@ -581,38 +657,84 @@ class _WorkQuantityField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: Text(
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: colorScheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
             workType.name,
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
-          ),
-        ),
-        const SizedBox(width: 12),
-        SizedBox(
-          width: 132,
-          child: TextField(
-            controller: controller,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w800,
                 ),
-            decoration: InputDecoration(
-              hintText: '0',
-              suffixText: _unitLabel(workType.unit),
-            ),
-            onTap: () => controller.selection = TextSelection(
-              baseOffset: 0,
-              extentOffset: controller.text.length,
-            ),
           ),
-        ),
-      ],
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              SizedBox.square(
+                dimension: 52,
+                child: IconButton.filledTonal(
+                  tooltip: 'Restar',
+                  onPressed: () => _adjust(-1),
+                  icon: const Icon(Icons.remove),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  controller: controller,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  textInputAction: TextInputAction.next,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.w900,
+                      ),
+                  decoration: InputDecoration(
+                    hintText: '0',
+                    suffixText: _unitLabel(workType.unit),
+                  ),
+                  onTap: () => controller.selection = TextSelection(
+                    baseOffset: 0,
+                    extentOffset: controller.text.length,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox.square(
+                dimension: 52,
+                child: IconButton.filled(
+                  tooltip: 'Sumar',
+                  onPressed: () => _adjust(1),
+                  icon: const Icon(Icons.add),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
+  }
+
+  void _adjust(double delta) {
+    final current =
+        double.tryParse(controller.text.trim().replaceAll(',', '.'));
+    final next = ((current ?? 0) + delta).clamp(0, 9999).toDouble();
+    final normalized = next % 1 == 0
+        ? next.toInt().toString()
+        : next.toStringAsFixed(1).replaceAll('.', ',');
+    controller
+      ..text = normalized
+      ..selection = TextSelection.collapsed(offset: normalized.length);
   }
 
   String _unitLabel(String unit) {
