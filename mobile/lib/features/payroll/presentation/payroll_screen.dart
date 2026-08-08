@@ -523,10 +523,6 @@ class _PayrollLineTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final quantity = line.quantity == line.quantity.roundToDouble()
-        ? line.quantity.toStringAsFixed(0)
-        : line.quantity.toStringAsFixed(2);
-
     final colorScheme = Theme.of(context).colorScheme;
 
     return Container(
@@ -564,7 +560,7 @@ class _PayrollLineTile extends ConsumerWidget {
                       ),
                 ),
                 const SizedBox(height: 2),
-                Text('$quantity ${_unitLabel(line.unit)}'),
+                Text(_quantityText(line.quantity, line.unit)),
                 Text(
                   !line.hasRate
                       ? 'Sin precio asignado'
@@ -656,6 +652,23 @@ class _PayrollLineTile extends ConsumerWidget {
       'tray' => 'bandeja',
       _ => value,
     };
+  }
+
+  String _quantityText(double quantity, String unit) {
+    if (unit == 'hour') return _formatHours(quantity);
+    return '$quantityText ${_unitLabel(unit)}';
+  }
+
+  String get quantityText => line.quantity == line.quantity.roundToDouble()
+      ? line.quantity.toStringAsFixed(0)
+      : line.quantity.toStringAsFixed(2);
+
+  String _formatHours(double hours) {
+    final totalMinutes = (hours * 60).round();
+    final h = totalMinutes ~/ 60;
+    final minutes = totalMinutes % 60;
+    if (minutes == 0) return '$h h';
+    return '$h h ${minutes.toString().padLeft(2, '0')} min';
   }
 }
 

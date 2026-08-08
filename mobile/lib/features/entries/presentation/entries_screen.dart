@@ -398,7 +398,7 @@ class _EmployeeEntriesGroup extends StatelessWidget {
               _EntryLine(
                 item: item,
                 date: dateFormat.format(item.workDate),
-                quantity: formatQuantity(item.quantity),
+                quantity: _quantityText(item.quantity, item.unit),
                 onApprove: item.status == 'draft' || item.status == 'pending'
                     ? () => onApprove(item)
                     : null,
@@ -420,6 +420,32 @@ class _EmployeeEntriesGroup extends StatelessWidget {
     if (parts.isEmpty || parts.first.isEmpty) return '?';
     if (parts.length == 1) return parts.first[0].toUpperCase();
     return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
+  }
+
+  String _quantityText(double quantity, String unit) {
+    if (unit == 'hour') return _formatHours(quantity);
+    return '${formatQuantity(quantity)} ${_unitLabel(unit)}';
+  }
+
+  String _formatHours(double hours) {
+    final totalMinutes = (hours * 60).round();
+    final h = totalMinutes ~/ 60;
+    final minutes = totalMinutes % 60;
+    if (minutes == 0) return '$h h';
+    return '$h h ${minutes.toString().padLeft(2, '0')} min';
+  }
+
+  String _unitLabel(String value) {
+    return switch (value) {
+      'hour' => 'h',
+      'day' => 'dia',
+      'unit' => 'unid.',
+      'service' => 'serv.',
+      'bag' => 'bolsa',
+      'bucket' => 'tacho',
+      'tray' => 'bandeja',
+      _ => value,
+    };
   }
 }
 
@@ -467,7 +493,7 @@ class _EntryLine extends StatelessWidget {
             _InfoPill(icon: Icons.calendar_today_outlined, text: date),
             _InfoPill(
               icon: Icons.numbers,
-              text: '$quantity ${_unitLabel(item.unit)}',
+              text: quantity,
             ),
           ],
         ),
@@ -509,19 +535,6 @@ class _EntryLine extends StatelessWidget {
         ],
       ],
     );
-  }
-
-  String _unitLabel(String value) {
-    return switch (value) {
-      'hour' => 'h',
-      'day' => 'dia',
-      'unit' => 'unid.',
-      'service' => 'serv.',
-      'bag' => 'bolsa',
-      'bucket' => 'tacho',
-      'tray' => 'bandeja',
-      _ => value,
-    };
   }
 }
 

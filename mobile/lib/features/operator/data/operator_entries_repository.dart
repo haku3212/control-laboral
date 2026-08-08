@@ -18,22 +18,36 @@ final operatorEntriesProvider =
   return ref.watch(operatorEntriesRepositoryProvider).list();
 });
 
+final operatorEntriesByDateProvider =
+    FutureProvider.family<List<OperatorEntry>, DateTime>((ref, date) async {
+  final profile = await ref.watch(currentProfileProvider.future);
+  if (profile == null) return [];
+  return ref.watch(operatorEntriesRepositoryProvider).list(workDate: date);
+});
+
 class OperatorEntriesRepository {
   OperatorEntriesRepository(this._client);
 
   final SupabaseClient _client;
   final _dateFormat = DateFormat('yyyy-MM-dd');
 
-  Future<List<OperatorEntry>> list() async {
+  Future<List<OperatorEntry>> list({DateTime? workDate}) async {
     final empresaId = await _empresaId();
-    final rows = await _client
+    final cutoff = DateTime.now().subtract(const Duration(days: 92));
+    var query = _client
         .from('work_entries')
         .select(
             'id, work_date, quantity, status, note, employees(full_name), work_types(name, unit)')
         .eq('empresa_id', empresaId)
-        .eq('registered_by', _client.auth.currentUser!.id)
-        .order('work_date', ascending: false)
-        .limit(50);
+        .eq('registered_by', _client.auth.currentUser!.id);
+
+    if (workDate != null) {
+      query = query.eq('work_date', _dateFormat.format(workDate));
+    } else {
+      query = query.gte('work_date', _dateFormat.format(cutoff));
+    }
+
+    final rows = await query.order('work_date', ascending: false).limit(50);
     return [for (final row in rows) OperatorEntry.fromMap(row)];
   }
 

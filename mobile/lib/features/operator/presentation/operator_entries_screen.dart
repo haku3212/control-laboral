@@ -7,40 +7,61 @@ import '../../../shared/widgets/empty_state.dart';
 import '../data/operator_entry.dart';
 import '../data/operator_entries_repository.dart';
 
-class OperatorEntriesScreen extends ConsumerWidget {
+class OperatorEntriesScreen extends ConsumerStatefulWidget {
   const OperatorEntriesScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final entries = ref.watch(operatorEntriesProvider);
+  ConsumerState<OperatorEntriesScreen> createState() =>
+      _OperatorEntriesScreenState();
+}
+
+class _OperatorEntriesScreenState extends ConsumerState<OperatorEntriesScreen> {
+  DateTime _selectedDate = DateTime.now();
+
+  @override
+  Widget build(BuildContext context) {
+    final entries = ref.watch(operatorEntriesByDateProvider(_selectedDate));
     final dateFormat = DateFormat('dd/MM/yyyy', 'es_BO');
 
     return AsyncValueView(
       value: entries,
       data: (items) {
         final groups = _groupEntries(items);
-        if (items.isEmpty) {
-          return const EmptyState(
-            icon: Icons.history_outlined,
-            title: 'Sin registros',
-            message: 'Tus registros enviados aparecerán aquí.',
-          );
-        }
+
         return RefreshIndicator(
-          onRefresh: () async => ref.invalidate(operatorEntriesProvider),
+          onRefresh: () async =>
+              ref.invalidate(operatorEntriesByDateProvider(_selectedDate)),
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
             children: [
+              _DateHeader(
+                date: dateFormat.format(_selectedDate),
+                onPrevious: _selectedDate.isAfter(_oldestVisibleDate)
+                    ? () => _moveDate(-1)
+                    : null,
+                onNext: !_isSameDay(_selectedDate, DateTime.now())
+                    ? () => _moveDate(1)
+                    : null,
+                onPick: _pickDate,
+                onToday: _setToday,
+              ),
+              const SizedBox(height: 12),
               _OperatorEntriesSummary(items: items),
               const SizedBox(height: 12),
-              for (final group in groups) ...[
-                _OperatorEntryGroupCard(
-                  group: group,
-                  date: dateFormat.format(group.workDate),
-                  formatQuantity: _formatQuantity,
-                ),
-                const SizedBox(height: 10),
-              ],
+              if (items.isEmpty)
+                const EmptyState(
+                  icon: Icons.history_outlined,
+                  title: 'Sin registros ese dia',
+                  message: 'Tus registros enviados apareceran aqui por fecha.',
+                )
+              else
+                for (final group in groups) ...[
+                  _OperatorEntryGroupCard(
+                    group: group,
+                    date: dateFormat.format(group.workDate),
+                  ),
+                  const SizedBox(height: 10),
+                ],
             ],
           ),
         );
@@ -48,10 +69,45 @@ class OperatorEntriesScreen extends ConsumerWidget {
     );
   }
 
-  String _formatQuantity(double value) {
-    return value == value.roundToDouble()
-        ? value.toStringAsFixed(0)
-        : value.toStringAsFixed(2);
+  DateTime get _oldestVisibleDate {
+    final cutoff = DateTime.now().subtract(const Duration(days: 92));
+    return DateTime(cutoff.year, cutoff.month, cutoff.day);
+  }
+
+  void _moveDate(int days) {
+    setState(() {
+      final next = DateTime(
+        _selectedDate.year,
+        _selectedDate.month,
+        _selectedDate.day + days,
+      );
+      if (next.isBefore(_oldestVisibleDate)) {
+        _selectedDate = _oldestVisibleDate;
+      } else if (next.isAfter(DateTime.now())) {
+        _selectedDate = DateTime.now();
+      } else {
+        _selectedDate = next;
+      }
+    });
+  }
+
+  void _setToday() {
+    setState(() => _selectedDate = DateTime.now());
+  }
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      firstDate: _oldestVisibleDate,
+      lastDate: DateTime.now(),
+      initialDate: _selectedDate,
+    );
+    if (picked == null) return;
+    setState(() => _selectedDate = picked);
+  }
+
+  bool _isSameDay(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
   }
 
   List<_OperatorEntryGroup> _groupEntries(List<OperatorEntry> items) {
@@ -74,6 +130,68 @@ class OperatorEntriesScreen extends ConsumerWidget {
     ];
     groups.sort((a, b) => b.workDate.compareTo(a.workDate));
     return groups;
+  }
+}
+
+class _DateHeader extends StatelessWidget {
+  const _DateHeader({
+    required this.date,
+    required this.onPrevious,
+    required this.onNext,
+    required this.onPick,
+    required this.onToday,
+  });
+
+  final String date;
+  final VoidCallback? onPrevious;
+  final VoidCallback? onNext;
+  final VoidCallback onPick;
+  final VoidCallback onToday;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                IconButton(
+                  tooltip: 'Dia anterior',
+                  onPressed: onPrevious,
+                  icon: const Icon(Icons.chevron_left),
+                ),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onPick,
+                    icon: const Icon(Icons.event_outlined),
+                    label: Text(date),
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Dia siguiente',
+                  onPressed: onNext,
+                  icon: const Icon(Icons.chevron_right),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            TextButton.icon(
+              onPressed: onToday,
+              icon: const Icon(Icons.today_outlined),
+              label: const Text('Ver hoy'),
+            ),
+            Text(
+              'Se muestra solo un dia. Historial visible: ultimos 3 meses.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -100,12 +218,6 @@ class _OperatorEntriesSummary extends StatelessWidget {
   Widget build(BuildContext context) {
     final pending = items.where((item) => item.status == 'pending').length;
     final confirmed = items.where((item) => item.status == 'confirmed').length;
-    final today = DateTime.now();
-    final todayCount = items.where((item) {
-      return item.workDate.year == today.year &&
-          item.workDate.month == today.month &&
-          item.workDate.day == today.day;
-    }).length;
 
     return Card(
       color: Theme.of(context).colorScheme.primaryContainer,
@@ -115,7 +227,7 @@ class _OperatorEntriesSummary extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Resumen de tus envíos',
+              'Resumen del dia',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     color: Theme.of(context).colorScheme.onPrimaryContainer,
                     fontWeight: FontWeight.w800,
@@ -126,7 +238,7 @@ class _OperatorEntriesSummary extends StatelessWidget {
               spacing: 8,
               runSpacing: 8,
               children: [
-                _SummaryPill(label: 'Hoy', value: '$todayCount'),
+                _SummaryPill(label: 'Lineas', value: '${items.length}'),
                 _SummaryPill(label: 'Pendientes', value: '$pending'),
                 _SummaryPill(label: 'Confirmados', value: '$confirmed'),
               ],
@@ -175,12 +287,10 @@ class _OperatorEntryGroupCard extends StatelessWidget {
   const _OperatorEntryGroupCard({
     required this.group,
     required this.date,
-    required this.formatQuantity,
   });
 
   final _OperatorEntryGroup group;
   final String date;
-  final String Function(double value) formatQuantity;
 
   @override
   Widget build(BuildContext context) {
@@ -233,8 +343,9 @@ class _OperatorEntryGroupCard extends StatelessWidget {
               children: [
                 _InfoPill(icon: Icons.calendar_today_outlined, text: date),
                 _InfoPill(
-                    icon: Icons.format_list_bulleted,
-                    text: '${group.items.length} lineas'),
+                  icon: Icons.format_list_bulleted,
+                  text: '${group.items.length} lineas',
+                ),
               ],
             ),
             const SizedBox(height: 12),
@@ -248,7 +359,7 @@ class _OperatorEntryGroupCard extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    '${formatQuantity(item.quantity)} ${_unitLabel(item.workTypeUnit)}',
+                    _quantityText(item.quantity, item.workTypeUnit),
                     style: const TextStyle(fontWeight: FontWeight.w800),
                   ),
                 ],
@@ -264,6 +375,22 @@ class _OperatorEntryGroupCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String _quantityText(double quantity, String unit) {
+    if (unit == 'hour') return _formatHours(quantity);
+    final value = quantity == quantity.roundToDouble()
+        ? quantity.toStringAsFixed(0)
+        : quantity.toStringAsFixed(2);
+    return '$value ${_unitLabel(unit)}';
+  }
+
+  String _formatHours(double hours) {
+    final totalMinutes = (hours * 60).round();
+    final h = totalMinutes ~/ 60;
+    final minutes = totalMinutes % 60;
+    if (minutes == 0) return '$h h';
+    return '$h h ${minutes.toString().padLeft(2, '0')} min';
   }
 
   IconData _workIcon(String unit) {

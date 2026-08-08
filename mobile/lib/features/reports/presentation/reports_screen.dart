@@ -138,7 +138,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
                 Card(
                   child: ListTile(
                     title: Text(row.workTypeName),
-                    subtitle: Text('${row.quantity} ${_unitLabel(row.unit)}'),
+                    subtitle: Text(_quantityText(row.quantity, row.unit)),
                     trailing: Text(money.format(row.total)),
                   ),
                 ),
@@ -478,7 +478,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
                       for (final line in item.lines)
                         [
                           line.workTypeName,
-                          '${line.quantity} ${_unitLabel(line.unit)}',
+                          _quantityText(line.quantity, line.unit),
                           money.format(line.rate ?? 0),
                           money.format(line.subtotal ?? 0),
                         ],
@@ -705,7 +705,7 @@ class _WorkerWeeklySummaryCard extends StatelessWidget {
                   children: [
                     Expanded(child: Text(line.workTypeName)),
                     Text(
-                      '${_formatNumber(line.quantity)} ${_unitLabel(line.unit)}',
+                      _quantityText(line.quantity, line.unit),
                     ),
                     const SizedBox(width: 10),
                     Text(money.format(line.subtotal)),
@@ -758,7 +758,7 @@ class _PlanillaTable extends StatelessWidget {
                   DataCell(Text(row.employeeName)),
                   DataCell(Text(dateFormat.format(row.workDate))),
                   DataCell(Text(row.workTypeName)),
-                  DataCell(Text('${row.quantity} ${_unitLabel(row.unit)}')),
+                  DataCell(Text(_quantityText(row.quantity, row.unit))),
                   DataCell(Text(money.format(row.rate ?? 0))),
                   DataCell(Text(money.format(row.subtotal ?? 0))),
                 ],
@@ -835,6 +835,19 @@ String _formatNumber(double value) {
   return value == value.roundToDouble()
       ? value.toStringAsFixed(0)
       : value.toStringAsFixed(2);
+}
+
+String _quantityText(double quantity, String unit) {
+  if (unit == 'hour') return _formatHours(quantity);
+  return '${_formatNumber(quantity)} ${_unitLabel(unit)}';
+}
+
+String _formatHours(double hours) {
+  final totalMinutes = (hours * 60).round();
+  final h = totalMinutes ~/ 60;
+  final minutes = totalMinutes % 60;
+  if (minutes == 0) return '$h h';
+  return '$h h ${minutes.toString().padLeft(2, '0')} min';
 }
 
 String _unitLabel(String value) {
