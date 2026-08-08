@@ -55,6 +55,12 @@ class _EntriesScreenState extends ConsumerState<EntriesScreen> {
                     group: group,
                     dateFormat: dateFormat,
                     formatQuantity: _formatQuantity,
+                    onApproveGroup: () => _setGroupStatus(
+                      context,
+                      ref,
+                      group.pendingItems.map((item) => item.id).toList(),
+                      'confirmed',
+                    ),
                     onApprove: (item) =>
                         _setStatus(context, ref, item.id, 'confirmed'),
                     onReject: (item) => _reject(context, ref, item.id),
@@ -132,6 +138,31 @@ class _EntriesScreenState extends ConsumerState<EntriesScreen> {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('No se pudo actualizar el registro: $error')),
+        );
+      }
+    }
+  }
+
+  Future<void> _setGroupStatus(
+    BuildContext context,
+    WidgetRef ref,
+    List<String> ids,
+    String status,
+  ) async {
+    if (ids.isEmpty) return;
+    try {
+      await ref.read(workEntriesRepositoryProvider).updateStatuses(ids, status);
+      ref.invalidate(workEntriesByDateProvider(_selectedDate));
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Registros aprobados correctamente.')),
+        );
+      }
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se pudo aprobar el grupo: $error')),
         );
       }
     }
@@ -282,6 +313,10 @@ class _EmployeeEntryGroupData {
   final String employeeCode;
   final String employeeName;
   final List<WorkEntry> items;
+
+  List<WorkEntry> get pendingItems => items
+      .where((item) => item.status == 'draft' || item.status == 'pending')
+      .toList();
 }
 
 class _EmployeeEntriesGroup extends StatelessWidget {
@@ -289,6 +324,7 @@ class _EmployeeEntriesGroup extends StatelessWidget {
     required this.group,
     required this.dateFormat,
     required this.formatQuantity,
+    required this.onApproveGroup,
     required this.onApprove,
     required this.onReject,
     required this.onEdit,
@@ -297,6 +333,7 @@ class _EmployeeEntriesGroup extends StatelessWidget {
   final _EmployeeEntryGroupData group;
   final DateFormat dateFormat;
   final String Function(double value) formatQuantity;
+  final VoidCallback onApproveGroup;
   final void Function(WorkEntry item) onApprove;
   final void Function(WorkEntry item) onReject;
   final void Function(WorkEntry item) onEdit;
@@ -305,9 +342,7 @@ class _EmployeeEntriesGroup extends StatelessWidget {
   Widget build(BuildContext context) {
     final totalQuantity =
         group.items.fold(0.0, (sum, item) => sum + item.quantity);
-    final pendingCount = group.items
-        .where((item) => item.status == 'draft' || item.status == 'pending')
-        .length;
+    final pendingCount = group.pendingItems.length;
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -347,6 +382,17 @@ class _EmployeeEntriesGroup extends StatelessWidget {
                   ),
               ],
             ),
+            if (pendingCount > 1) ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: onApproveGroup,
+                  icon: const Icon(Icons.done_all_outlined),
+                  label: Text('Aprobar $pendingCount registros juntos'),
+                ),
+              ),
+            ],
             const Divider(height: 22),
             for (final item in group.items) ...[
               _EntryLine(
@@ -468,6 +514,7 @@ class _EntryLine extends StatelessWidget {
   String _unitLabel(String value) {
     return switch (value) {
       'hour' => 'h',
+      'day' => 'dia',
       'unit' => 'unid.',
       'service' => 'serv.',
       'bag' => 'bolsa',

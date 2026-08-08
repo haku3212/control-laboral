@@ -18,6 +18,7 @@ class OperatorEntriesScreen extends ConsumerWidget {
     return AsyncValueView(
       value: entries,
       data: (items) {
+        final groups = _groupEntries(items);
         if (items.isEmpty) {
           return const EmptyState(
             icon: Icons.history_outlined,
@@ -32,11 +33,11 @@ class OperatorEntriesScreen extends ConsumerWidget {
             children: [
               _OperatorEntriesSummary(items: items),
               const SizedBox(height: 12),
-              for (final item in items) ...[
-                _OperatorEntryCard(
-                  item: item,
-                  date: dateFormat.format(item.workDate),
-                  quantity: _formatQuantity(item.quantity),
+              for (final group in groups) ...[
+                _OperatorEntryGroupCard(
+                  group: group,
+                  date: dateFormat.format(group.workDate),
+                  formatQuantity: _formatQuantity,
                 ),
                 const SizedBox(height: 10),
               ],
@@ -52,6 +53,42 @@ class OperatorEntriesScreen extends ConsumerWidget {
         ? value.toStringAsFixed(0)
         : value.toStringAsFixed(2);
   }
+
+  List<_OperatorEntryGroup> _groupEntries(List<OperatorEntry> items) {
+    final grouped = <String, List<OperatorEntry>>{};
+    for (final item in items) {
+      final day =
+          DateTime(item.workDate.year, item.workDate.month, item.workDate.day);
+      final key =
+          '${item.employeeName}|${day.toIso8601String()}|${item.status}';
+      grouped.putIfAbsent(key, () => []).add(item);
+    }
+    final groups = [
+      for (final entry in grouped.entries)
+        _OperatorEntryGroup(
+          employeeName: entry.value.first.employeeName,
+          workDate: entry.value.first.workDate,
+          status: entry.value.first.status,
+          items: entry.value,
+        ),
+    ];
+    groups.sort((a, b) => b.workDate.compareTo(a.workDate));
+    return groups;
+  }
+}
+
+class _OperatorEntryGroup {
+  const _OperatorEntryGroup({
+    required this.employeeName,
+    required this.workDate,
+    required this.status,
+    required this.items,
+  });
+
+  final String employeeName;
+  final DateTime workDate;
+  final String status;
+  final List<OperatorEntry> items;
 }
 
 class _OperatorEntriesSummary extends StatelessWidget {
@@ -134,16 +171,16 @@ class _SummaryPill extends StatelessWidget {
   }
 }
 
-class _OperatorEntryCard extends StatelessWidget {
-  const _OperatorEntryCard({
-    required this.item,
+class _OperatorEntryGroupCard extends StatelessWidget {
+  const _OperatorEntryGroupCard({
+    required this.group,
     required this.date,
-    required this.quantity,
+    required this.formatQuantity,
   });
 
-  final OperatorEntry item;
+  final _OperatorEntryGroup group;
   final String date;
-  final String quantity;
+  final String Function(double value) formatQuantity;
 
   @override
   Widget build(BuildContext context) {
@@ -160,7 +197,7 @@ class _OperatorEntryCard extends StatelessWidget {
                   backgroundColor:
                       Theme.of(context).colorScheme.primaryContainer,
                   child: Icon(
-                    _workIcon(item.workTypeUnit),
+                    _workIcon(group.items.first.workTypeUnit),
                     color: Theme.of(context).colorScheme.onPrimaryContainer,
                   ),
                 ),
@@ -170,7 +207,7 @@ class _OperatorEntryCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        item.employeeName,
+                        group.employeeName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context)
@@ -179,14 +216,14 @@ class _OperatorEntryCard extends StatelessWidget {
                             ?.copyWith(fontWeight: FontWeight.w700),
                       ),
                       Text(
-                        item.workTypeName,
+                        '${group.items.length} trabajos enviados',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),
                 ),
-                Flexible(child: _StatusChip(status: item.status)),
+                Flexible(child: _StatusChip(status: group.status)),
               ],
             ),
             const SizedBox(height: 12),
@@ -196,22 +233,32 @@ class _OperatorEntryCard extends StatelessWidget {
               children: [
                 _InfoPill(icon: Icons.calendar_today_outlined, text: date),
                 _InfoPill(
-                  icon: Icons.numbers,
-                  text: '$quantity ${_unitLabel(item.workTypeUnit)}',
-                ),
+                    icon: Icons.format_list_bulleted,
+                    text: '${group.items.length} lineas'),
               ],
             ),
-            if (item.note != null && item.note!.trim().isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(item.note!),
+            const SizedBox(height: 12),
+            for (final item in group.items) ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      item.workTypeName,
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                  ),
+                  Text(
+                    '${formatQuantity(item.quantity)} ${_unitLabel(item.workTypeUnit)}',
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                ],
               ),
+              if (item.note != null && item.note!.trim().isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(item.note!),
+                ),
+              if (item != group.items.last) const Divider(height: 16),
             ],
           ],
         ),
@@ -222,6 +269,7 @@ class _OperatorEntryCard extends StatelessWidget {
   IconData _workIcon(String unit) {
     return switch (unit) {
       'hour' => Icons.schedule_outlined,
+      'day' => Icons.calendar_today_outlined,
       'bag' => Icons.shopping_bag_outlined,
       'bucket' => Icons.inventory_2_outlined,
       'tray' => Icons.table_bar_outlined,
@@ -232,6 +280,7 @@ class _OperatorEntryCard extends StatelessWidget {
   String _unitLabel(String value) {
     return switch (value) {
       'hour' => 'h',
+      'day' => 'dia',
       'unit' => 'unid.',
       'service' => 'serv.',
       'bag' => 'bolsa',

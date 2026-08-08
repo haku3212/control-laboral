@@ -89,6 +89,19 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
               lines: planRows.length,
             ),
             const SizedBox(height: 12),
+            const _SectionTitle(
+              icon: Icons.groups_2_outlined,
+              title: 'Resumen semanal por trabajador',
+            ),
+            const SizedBox(height: 8),
+            if (filtered.isEmpty)
+              const Text('Sin trabajadores en el rango.')
+            else
+              for (final item in filtered) ...[
+                _WorkerWeeklySummaryCard(summary: item, money: money),
+                const SizedBox(height: 10),
+              ],
+            const SizedBox(height: 12),
             Row(
               children: [
                 Expanded(
@@ -649,6 +662,68 @@ class _SectionTitle extends StatelessWidget {
   }
 }
 
+class _WorkerWeeklySummaryCard extends StatelessWidget {
+  const _WorkerWeeklySummaryCard({
+    required this.summary,
+    required this.money,
+  });
+
+  final EmployeePayrollSummary summary;
+  final NumberFormat money;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '${summary.employeeCode} - ${summary.employeeName}',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                  ),
+                ),
+                Text(
+                  money.format(summary.totalPayable),
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w900,
+                      ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            for (final line in summary.groupedLines)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  children: [
+                    Expanded(child: Text(line.workTypeName)),
+                    Text(
+                      '${_formatNumber(line.quantity)} ${_unitLabel(line.unit)}',
+                    ),
+                    const SizedBox(width: 10),
+                    Text(money.format(line.subtotal)),
+                  ],
+                ),
+              ),
+            if (summary.hasMissingRates)
+              Text(
+                'Faltan precios por asignar.',
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _PlanillaTable extends StatelessWidget {
   const _PlanillaTable({required this.rows, required this.money});
 
@@ -765,6 +840,7 @@ String _formatNumber(double value) {
 String _unitLabel(String value) {
   return switch (value) {
     'hour' => 'h',
+    'day' => 'dia',
     'unit' => 'unid.',
     'service' => 'serv.',
     'bag' => 'bolsa',

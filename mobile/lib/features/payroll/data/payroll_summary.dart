@@ -46,6 +46,25 @@ class EmployeePayrollSummary {
 
   double get totalQuantity => lines.fold(0, (sum, line) => sum + line.quantity);
 
+  List<PayrollLineTotal> get groupedLines {
+    final grouped = <String, PayrollLineTotal>{};
+    for (final line in lines) {
+      final key = line.workTypeId;
+      final current = grouped[key];
+      grouped[key] = PayrollLineTotal(
+        workTypeId: line.workTypeId,
+        workTypeName: line.workTypeName,
+        unit: line.unit,
+        quantity: (current?.quantity ?? 0) + line.quantity,
+        rate: current?.rate ?? line.rate,
+        subtotal: (current?.subtotal ?? 0) + (line.subtotal ?? 0),
+        hasMissingRate: (current?.hasMissingRate ?? false) || !line.hasRate,
+      );
+    }
+    return grouped.values.toList()
+      ..sort((a, b) => a.workTypeName.compareTo(b.workTypeName));
+  }
+
   double get totalPayable {
     final value = grossPayable + adjustmentSignedTotal;
     return value < 0 ? 0 : value;
@@ -62,6 +81,28 @@ class EmployeePayrollSummary {
 
   bool get hasMissingRates => lines.any((line) => !line.hasRate);
   bool get isPaid => status == 'paid';
+}
+
+class PayrollLineTotal {
+  const PayrollLineTotal({
+    required this.workTypeId,
+    required this.workTypeName,
+    required this.unit,
+    required this.quantity,
+    required this.rate,
+    required this.subtotal,
+    required this.hasMissingRate,
+  });
+
+  final String workTypeId;
+  final String workTypeName;
+  final String unit;
+  final double quantity;
+  final double? rate;
+  final double subtotal;
+  final bool hasMissingRate;
+
+  bool get hasRate => !hasMissingRate && rate != null;
 }
 
 class PayrollAdjustment {

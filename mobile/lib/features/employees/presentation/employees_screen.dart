@@ -138,25 +138,40 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
                                     ],
                                   ),
                                 ),
-                                Switch(
-                                  value: employee.active,
-                                  onChanged: (value) async {
-                                    if (!value) {
-                                      final confirmed =
-                                          await _confirmDeactivate(
-                                        context,
-                                        employee.fullName,
-                                      );
+                                Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Switch(
+                                      value: employee.active,
+                                      onChanged: (value) async {
+                                        if (!value) {
+                                          final confirmed =
+                                              await _confirmDeactivate(
+                                            context,
+                                            employee.fullName,
+                                          );
 
-                                      if (!confirmed) return;
-                                    }
+                                          if (!confirmed) return;
+                                        }
 
-                                    await ref
-                                        .read(employeesRepositoryProvider)
-                                        .setActive(employee.id, value);
+                                        await ref
+                                            .read(employeesRepositoryProvider)
+                                            .setActive(employee.id, value);
 
-                                    ref.invalidate(employeesProvider);
-                                  },
+                                        ref.invalidate(employeesProvider);
+                                      },
+                                    ),
+                                    IconButton(
+                                      tooltip: 'Eliminar trabajador',
+                                      onPressed: () =>
+                                          _deleteEmployee(context, employee),
+                                      icon: Icon(
+                                        Icons.delete_outline,
+                                        color:
+                                            Theme.of(context).colorScheme.error,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
@@ -231,6 +246,55 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
           ),
         ) ??
         false;
+  }
+
+  Future<void> _deleteEmployee(
+    BuildContext context,
+    Employee employee,
+  ) async {
+    final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Eliminar trabajador'),
+            content: Text(
+              'Se eliminara permanentemente a ${employee.fullName}. '
+              'Si tiene registros antiguos, la base puede bloquearlo para '
+              'no perder historial.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancelar'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Eliminar'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+
+    if (!confirmed) return;
+
+    try {
+      await ref.read(employeesRepositoryProvider).delete(employee.id);
+      ref.invalidate(employeesProvider);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Trabajador eliminado.')),
+        );
+      }
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'No se pudo eliminar. Si tiene historial, desactivalo: $error',
+          ),
+        ),
+      );
+    }
   }
 }
 
@@ -632,6 +696,7 @@ class _AllowedWorkTypesPicker extends StatelessWidget {
 String _unitLabel(String value) {
   return switch (value) {
     'hour' => 'Horas',
+    'day' => 'Dias',
     'unit' => 'Unidades',
     'service' => 'Servicios',
     'bag' => 'Bolsas',

@@ -25,6 +25,7 @@ class _OperatorNewEntryScreenState
   bool _saving = false;
 
   final Map<String, TextEditingController> _quantityControllers = {};
+  final Map<String, TextEditingController> _commonHoursControllers = {};
   final Map<String, TextEditingController> _noteControllers = {};
   final Map<String, TimeOfDay?> _startTimes = {};
   final Map<String, TimeOfDay?> _endTimes = {};
@@ -32,6 +33,9 @@ class _OperatorNewEntryScreenState
   @override
   void dispose() {
     for (final controller in _quantityControllers.values) {
+      controller.dispose();
+    }
+    for (final controller in _commonHoursControllers.values) {
       controller.dispose();
     }
     for (final controller in _noteControllers.values) {
@@ -81,13 +85,14 @@ class _OperatorNewEntryScreenState
                 }
 
                 final selectedEmployee = _selectedEmployee(activeEmployees);
+                final commonHourType = _commonHourWorkType(activeWorkTypes);
                 final selectedWorkTypes = selectedEmployee == null
                     ? const <WorkType>[]
                     : _allowedWorkTypes(
                         selectedEmployee,
                         activeWorkTypes,
                         permissionMap,
-                      );
+                      ).where((item) => item.id != commonHourType?.id).toList();
 
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -114,8 +119,11 @@ class _OperatorNewEntryScreenState
                       _EmployeeSheetSection(
                         employee: selectedEmployee,
                         workTypes: selectedWorkTypes,
+                        commonHourType: commonHourType,
                         quantityController: (workTypeId) => _quantityController(
                             selectedEmployee.id, workTypeId),
+                        commonHoursController:
+                            _commonHoursController(selectedEmployee.id),
                         noteController: _noteController(selectedEmployee.id),
                         startTime: _startTimes[selectedEmployee.id],
                         endTime: _endTimes[selectedEmployee.id],
@@ -133,6 +141,7 @@ class _OperatorNewEntryScreenState
                             : () => _submitSheet(
                                   selectedEmployee,
                                   selectedWorkTypes,
+                                  commonHourType,
                                 ),
                         icon: _saving
                             ? const SizedBox.square(
@@ -181,6 +190,25 @@ class _OperatorNewEntryScreenState
         .toList();
   }
 
+  WorkType? _commonHourWorkType(List<WorkType> activeWorkTypes) {
+    for (final item in activeWorkTypes) {
+      final code = item.code.toLowerCase().trim();
+      final name = item.name.toLowerCase().trim();
+      if (item.unit == 'hour' &&
+          (code == 'hora_comun' ||
+              code == 'horas_comunes' ||
+              name.contains('hora comun') ||
+              name.contains('horas comunes'))) {
+        return item;
+      }
+    }
+
+    for (final item in activeWorkTypes) {
+      if (item.unit == 'hour' && item.category == 'hourly') return item;
+    }
+    return null;
+  }
+
   TextEditingController _quantityController(
     String employeeId,
     String workTypeId,
@@ -188,6 +216,13 @@ class _OperatorNewEntryScreenState
     final key = '$employeeId:$workTypeId';
     return _quantityControllers.putIfAbsent(
       key,
+      () => TextEditingController(),
+    );
+  }
+
+  TextEditingController _commonHoursController(String employeeId) {
+    return _commonHoursControllers.putIfAbsent(
+      employeeId,
       () => TextEditingController(),
     );
   }
@@ -229,6 +264,7 @@ class _OperatorNewEntryScreenState
   Future<void> _submitSheet(
     Employee employee,
     List<WorkType> workTypes,
+    WorkType? commonHourType,
   ) async {
     final profile = await ref.read(currentProfileProvider.future);
     if (profile == null || !profile.isOperator) {
@@ -241,6 +277,8 @@ class _OperatorNewEntryScreenState
     final startTime = _toParts(_startTimes[employee.id]);
     final endTime = _toParts(_endTimes[employee.id]);
     final restMinutes = _automaticRestMinutes(employee.id);
+    final manualCommonHours =
+        _parseQuantity(_commonHoursController(employee.id).text);
 
     for (final workType in workTypes) {
       final controller = _quantityController(employee.id, workType.id);
@@ -263,8 +301,41 @@ class _OperatorNewEntryScreenState
       );
     }
 
+    final grossHours = _grossWorkedHours(employee.id);
+    final automaticCommonHours = drafts.isEmpty && manualCommonHours == null
+        ? _netWorkedHours(employee.id)
+        : null;
+    final commonHours = manualCommonHours ?? automaticCommonHours;
+    if (commonHours != null && commonHours > 0) {
+      if (commonHourType == null) {
+        _showMessage(
+          'Crea o activa el tipo de trabajo "Hora comun" para guardar horas.',
+        );
+        return;
+      }
+      drafts.insert(
+        0,
+        OperatorEntryDraft(
+          employeeId: employee.id,
+          workTypeId: commonHourType.id,
+          workDate: _workDate,
+          quantity: commonHours,
+          status: 'pending',
+          attendanceStatus: 'presente',
+          startTime: startTime,
+          endTime: endTime,
+          restMinutes: restMinutes,
+          note: note,
+        ),
+      );
+    }
+
     if (drafts.isEmpty) {
-      _showMessage('Llena al menos una casilla de ${employee.fullName}.');
+      _showMessage(
+        grossHours == null
+            ? 'Llena al menos una casilla o marca entrada y salida.'
+            : 'No se pudieron calcular horas comunes.',
+      );
       return;
     }
 
@@ -299,6 +370,7 @@ class _OperatorNewEntryScreenState
         if (entry.key.startsWith('$employeeId:')) entry.value.clear();
       }
       _noteControllers[employeeId]?.clear();
+      _commonHoursControllers[employeeId]?.clear();
       _startTimes.remove(employeeId);
       _endTimes.remove(employeeId);
     });
@@ -309,6 +381,9 @@ class _OperatorNewEntryScreenState
       controller.clear();
     }
     for (final controller in _noteControllers.values) {
+      controller.clear();
+    }
+    for (final controller in _commonHoursControllers.values) {
       controller.clear();
     }
     _startTimes.clear();
@@ -331,6 +406,13 @@ class _OperatorNewEntryScreenState
     final grossHours = _grossWorkedHours(employeeId);
     if (grossHours == null) return 0;
     return grossHours > 7 ? 30 : 0;
+  }
+
+  double? _netWorkedHours(String employeeId) {
+    final grossHours = _grossWorkedHours(employeeId);
+    if (grossHours == null) return null;
+    final net = grossHours - (_automaticRestMinutes(employeeId) / 60);
+    return net <= 0 ? null : double.parse(net.toStringAsFixed(2));
   }
 
   TimeOfDayParts? _toParts(TimeOfDay? time) {
@@ -468,7 +550,9 @@ class _EmployeeSheetSection extends StatelessWidget {
   const _EmployeeSheetSection({
     required this.employee,
     required this.workTypes,
+    required this.commonHourType,
     required this.quantityController,
+    required this.commonHoursController,
     required this.noteController,
     required this.startTime,
     required this.endTime,
@@ -480,7 +564,9 @@ class _EmployeeSheetSection extends StatelessWidget {
 
   final Employee employee;
   final List<WorkType> workTypes;
+  final WorkType? commonHourType;
   final TextEditingController Function(String workTypeId) quantityController;
+  final TextEditingController commonHoursController;
   final TextEditingController noteController;
   final TimeOfDay? startTime;
   final TimeOfDay? endTime;
@@ -547,13 +633,23 @@ class _EmployeeSheetSection extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             Text(
-              '2. Llena sus trabajos',
+              '2. Llena sus trabajos u horas',
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 10),
+            if (commonHourType != null) ...[
+              _WorkQuantityField(
+                workType: commonHourType!,
+                controller: commonHoursController,
+                highlight: true,
+              ),
+              const SizedBox(height: 10),
+            ],
             if (workTypes.isEmpty)
               Text(
-                'Sin trabajos permitidos.',
+                commonHourType == null
+                    ? 'Sin trabajos permitidos.'
+                    : 'No hay otros trabajos asignados.',
                 style: TextStyle(color: colorScheme.onSurfaceVariant),
               )
             else
@@ -566,8 +662,13 @@ class _EmployeeSheetSection extends StatelessWidget {
               ],
             const SizedBox(height: 10),
             Text(
-              '3. Horas opcionales',
+              '3. Entrada y salida',
               style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 2),
+            Text(
+              'Si solo marcas entrada y salida, se guardara como Hora comun.',
+              style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: 8),
             Row(
@@ -650,10 +751,12 @@ class _WorkQuantityField extends StatelessWidget {
   const _WorkQuantityField({
     required this.workType,
     required this.controller,
+    this.highlight = false,
   });
 
   final WorkType workType;
   final TextEditingController controller;
+  final bool highlight;
 
   @override
   Widget build(BuildContext context) {
@@ -662,15 +765,19 @@ class _WorkQuantityField extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
+        color: highlight
+            ? colorScheme.primaryContainer.withValues(alpha: 0.62)
+            : colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: colorScheme.outlineVariant),
+        border: Border.all(
+          color: highlight ? colorScheme.primary : colorScheme.outlineVariant,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            workType.name,
+            highlight ? '${workType.name} (total)' : workType.name,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -740,6 +847,7 @@ class _WorkQuantityField extends StatelessWidget {
   String _unitLabel(String unit) {
     return switch (unit) {
       'hour' => 'h',
+      'day' => 'dia',
       'unit' => 'u',
       'service' => 's',
       'bag' => 'b',

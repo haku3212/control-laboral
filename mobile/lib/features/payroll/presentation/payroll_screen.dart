@@ -279,7 +279,7 @@ class _EmployeePayrollCard extends ConsumerWidget {
                   : 'Precios completos',
             ),
             const Divider(height: 22),
-            for (final line in summary.lines)
+            for (final line in summary.groupedLines)
               Padding(
                 padding: const EdgeInsets.only(bottom: 10),
                 child: _PayrollLineTile(line: line, money: money),
@@ -395,32 +395,42 @@ class _EmployeePayrollCard extends ConsumerWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: FilledButton.icon(
-                    onPressed: () async {
-                      final confirmed = await _confirmPayment(context);
-                      if (!confirmed) return;
-                      try {
-                        await ref
-                            .read(payrollRepositoryProvider)
-                            .setPaid(summary.employeeId, true);
-                        ref.invalidate(payrollSummariesProvider);
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Pago marcado como pagado.'),
-                            ),
-                          );
-                        }
-                      } catch (error) {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content:
-                                  Text('No se pudo registrar el pago: $error'),
-                            ),
-                          );
-                        }
-                      }
-                    },
+                    onPressed: summary.hasMissingRates
+                        ? () {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Asigna precio a todos los trabajos antes de pagar.',
+                                ),
+                              ),
+                            );
+                          }
+                        : () async {
+                            final confirmed = await _confirmPayment(context);
+                            if (!confirmed) return;
+                            try {
+                              await ref
+                                  .read(payrollRepositoryProvider)
+                                  .setPaid(summary.employeeId, true);
+                              ref.invalidate(payrollSummariesProvider);
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Pago marcado como pagado.'),
+                                  ),
+                                );
+                              }
+                            } catch (error) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                        'No se pudo registrar el pago: $error'),
+                                  ),
+                                );
+                              }
+                            }
+                          },
                     icon: const Icon(Icons.check_circle_outline),
                     label: const Text('Marcar pagado'),
                   ),
@@ -508,7 +518,7 @@ class _PayrollLineTile extends ConsumerWidget {
     required this.money,
   });
 
-  final PayrollLine line;
+  final PayrollLineTotal line;
   final NumberFormat money;
 
   @override
@@ -556,11 +566,11 @@ class _PayrollLineTile extends ConsumerWidget {
                 const SizedBox(height: 2),
                 Text('$quantity ${_unitLabel(line.unit)}'),
                 Text(
-                  line.rate == null
+                  !line.hasRate
                       ? 'Sin precio asignado'
                       : '${money.format(line.rate)} x unidad',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: line.rate == null
+                        color: !line.hasRate
                             ? colorScheme.error
                             : colorScheme.onSurfaceVariant,
                       ),
@@ -569,7 +579,7 @@ class _PayrollLineTile extends ConsumerWidget {
             ),
           ),
           const SizedBox(width: 8),
-          if (line.rate == null)
+          if (!line.hasRate)
             OutlinedButton(
               onPressed: () => _assignRate(context, ref),
               style: OutlinedButton.styleFrom(
@@ -582,7 +592,7 @@ class _PayrollLineTile extends ConsumerWidget {
             )
           else
             Text(
-              money.format(line.subtotal!),
+              money.format(line.subtotal),
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.w800,
                   ),
@@ -595,6 +605,7 @@ class _PayrollLineTile extends ConsumerWidget {
   IconData _iconForUnit(String unit) {
     return switch (unit) {
       'hour' => Icons.schedule_outlined,
+      'day' => Icons.calendar_today_outlined,
       'bag' => Icons.shopping_bag_outlined,
       'bucket' => Icons.inventory_2_outlined,
       'tray' => Icons.table_bar_outlined,
@@ -637,6 +648,7 @@ class _PayrollLineTile extends ConsumerWidget {
   String _unitLabel(String value) {
     return switch (value) {
       'hour' => 'h',
+      'day' => 'dia',
       'unit' => 'unid.',
       'service' => 'serv.',
       'bag' => 'bolsa',

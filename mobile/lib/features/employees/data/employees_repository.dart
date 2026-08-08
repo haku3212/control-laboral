@@ -133,6 +133,24 @@ class EmployeesRepository {
     }).eq('id', id);
   }
 
+  Future<void> delete(String id) async {
+    final empresaId = await _empresaId();
+    await _client
+        .from('employee_work_types')
+        .delete()
+        .eq('empresa_id', empresaId)
+        .eq('employee_id', id);
+    await _client
+        .from('rates')
+        .delete()
+        .eq('empresa_id', empresaId)
+        .eq('employee_id', id);
+    await _client.from('employees').delete().eq('empresa_id', empresaId).eq(
+          'id',
+          id,
+        );
+  }
+
   Future<Set<String>> allowedWorkTypeIds(String employeeId) async {
     final empresaId = await _empresaId();
     final rows = await _client

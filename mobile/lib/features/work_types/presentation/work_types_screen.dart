@@ -6,12 +6,14 @@ import '../../../shared/widgets/empty_state.dart';
 import '../data/work_type.dart';
 import '../data/work_types_repository.dart';
 
-const units = ['hour', 'unit', 'service', 'bag', 'bucket', 'tray'];
+const units = ['hour', 'day', 'unit', 'service', 'bag', 'bucket', 'tray'];
+const customUnitValue = '__custom__';
 const categories = ['hourly', 'quantity', 'attendance'];
 
 String unitLabel(String value) {
   return switch (value) {
     'hour' => 'Hora',
+    'day' => 'Dia',
     'unit' => 'Unidad',
     'service' => 'Servicio',
     'bag' => 'Bolsa',
@@ -122,6 +124,7 @@ class _WorkTypeFormState extends ConsumerState<_WorkTypeForm> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _code;
   late final TextEditingController _name;
+  late final TextEditingController _customUnit;
   late String _unit;
   late String _category;
   late bool _active;
@@ -133,7 +136,12 @@ class _WorkTypeFormState extends ConsumerState<_WorkTypeForm> {
     final item = widget.item;
     _code = TextEditingController(text: item?.code);
     _name = TextEditingController(text: item?.name);
-    _unit = item?.unit ?? units.first;
+    _unit = item == null || units.contains(item.unit)
+        ? item?.unit ?? units.first
+        : customUnitValue;
+    _customUnit = TextEditingController(
+      text: item == null || units.contains(item.unit) ? '' : item.unit,
+    );
     _category = item?.category ?? categories.first;
     _active = item?.active ?? true;
   }
@@ -142,6 +150,7 @@ class _WorkTypeFormState extends ConsumerState<_WorkTypeForm> {
   void dispose() {
     _code.dispose();
     _name.dispose();
+    _customUnit.dispose();
     super.dispose();
   }
 
@@ -209,12 +218,28 @@ class _WorkTypeFormState extends ConsumerState<_WorkTypeForm> {
                 items: [
                   for (final unit in units)
                     DropdownMenuItem(value: unit, child: Text(unitLabel(unit))),
+                  const DropdownMenuItem(
+                    value: customUnitValue,
+                    child: Text('Otra unidad'),
+                  ),
                 ],
                 onChanged: (value) => setState(() {
                   _unit = value ?? _unit;
                   _category = _unit == 'hour' ? 'hourly' : _category;
                 }),
               ),
+              if (_unit == customUnitValue) ...[
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _customUnit,
+                  decoration: const InputDecoration(
+                    labelText: 'Unidad manual',
+                    hintText: 'Ej: litro, viaje, caja',
+                    prefixIcon: Icon(Icons.edit_outlined),
+                  ),
+                  validator: _required,
+                ),
+              ],
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 initialValue: _category,
@@ -268,7 +293,7 @@ class _WorkTypeFormState extends ConsumerState<_WorkTypeForm> {
             id: widget.item?.id,
             code: _code.text,
             name: _name.text,
-            unit: _unit,
+            unit: _normalizedUnit,
             category: _category,
             active: _active,
           );
@@ -281,5 +306,10 @@ class _WorkTypeFormState extends ConsumerState<_WorkTypeForm> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  String get _normalizedUnit {
+    if (_unit != customUnitValue) return _unit;
+    return _customUnit.text.trim().toLowerCase().replaceAll(' ', '_');
   }
 }

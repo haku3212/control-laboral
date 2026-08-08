@@ -59,6 +59,24 @@ class WorkEntriesRepository {
     }).eq('id', id);
   }
 
+  Future<void> updateStatuses(
+    List<String> ids,
+    String status, {
+    String? reason,
+  }) async {
+    if (ids.isEmpty) return;
+    final userId = _client.auth.currentUser?.id;
+    await _client.from('work_entries').update({
+      'status': status,
+      'revisado_por': userId,
+      'fecha_revision': DateTime.now().toIso8601String(),
+      'motivo_rechazo':
+          reason == null || reason.trim().isEmpty ? null : reason.trim(),
+      'modificado_por': userId,
+      'fecha_modificacion': DateTime.now().toIso8601String(),
+    }).inFilter('id', ids);
+  }
+
   Future<void> updateDetails({
     required String id,
     required double quantity,
