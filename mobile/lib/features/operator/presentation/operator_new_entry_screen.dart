@@ -14,173 +14,223 @@ class OperatorNewEntryScreen extends ConsumerStatefulWidget {
   const OperatorNewEntryScreen({super.key});
 
   @override
-  ConsumerState<OperatorNewEntryScreen> createState() => _OperatorNewEntryScreenState();
+  ConsumerState<OperatorNewEntryScreen> createState() =>
+      _OperatorNewEntryScreenState();
 }
 
-class _OperatorNewEntryScreenState extends ConsumerState<OperatorNewEntryScreen> {
-  final _formKey = GlobalKey<FormState>();
-  final _quantity = TextEditingController();
-  final _note = TextEditingController();
-  final _newEmployee = TextEditingController();
-  final _newWorkType = TextEditingController();
-  final _inlineEmployee = TextEditingController();
-  final _inlineWorkType = TextEditingController();
-  String? _employeeId;
-  String? _workTypeId;
+class _OperatorNewEntryScreenState
+    extends ConsumerState<OperatorNewEntryScreen> {
   DateTime _workDate = DateTime.now();
+  String? _employeeId;
   bool _saving = false;
+
+  final Map<String, TextEditingController> _quantityControllers = {};
+  final Map<String, TextEditingController> _commonHoursControllers = {};
+  final Map<String, TextEditingController> _noteControllers = {};
+  final Map<String, TimeOfDay?> _startTimes = {};
+  final Map<String, TimeOfDay?> _endTimes = {};
 
   @override
   void dispose() {
-    _quantity.dispose();
-    _note.dispose();
-    _newEmployee.dispose();
-    _newWorkType.dispose();
-    _inlineEmployee.dispose();
-    _inlineWorkType.dispose();
+    for (final controller in _quantityControllers.values) {
+      controller.dispose();
+    }
+    for (final controller in _commonHoursControllers.values) {
+      controller.dispose();
+    }
+    for (final controller in _noteControllers.values) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final workTypes = ref.watch(workTypesProvider);
     final employees = ref.watch(employeesProvider);
+    final workTypes = ref.watch(workTypesProvider);
+    final permissions = ref.watch(employeeAllowedWorkTypeIdsMapProvider);
     final dateFormat = DateFormat('dd/MM/yyyy', 'es_BO');
 
-    return Form(
-      key: _formKey,
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Text(
-            'Nuevo registro',
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
-          const SizedBox(height: 8),
-          const Text('El registro quedara pendiente hasta que el admin lo revise.'),
-          const SizedBox(height: 16),
-          employees.when(
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        _SheetHeader(
+          date: dateFormat.format(_workDate),
+          onPickDate: _pickDate,
+        ),
+        const SizedBox(height: 12),
+        employees.when(
+          loading: () => const LinearProgressIndicator(),
+          error: (error, _) => Text('No se cargaron trabajadores: $error'),
+          data: (employeeItems) => workTypes.when(
             loading: () => const LinearProgressIndicator(),
-            error: (error, _) => Text('No se cargaron trabajadores: $error'),
-            data: (items) => _employeeDropdown(items.where((e) => e.active).toList()),
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _inlineEmployee,
-            decoration: const InputDecoration(
-              labelText: 'Escribir trabajador si no esta en la lista',
-              prefixIcon: Icon(Icons.person_add_alt),
+            error: (error, _) => Text('No se cargaron trabajos: $error'),
+            data: (workTypeItems) => permissions.when(
+              loading: () => const LinearProgressIndicator(),
+              error: (error, _) =>
+                  Text('No se cargaron trabajos permitidos: $error'),
+              data: (permissionMap) {
+                final activeEmployees =
+                    employeeItems.where((item) => item.active).toList();
+                final activeWorkTypes =
+                    workTypeItems.where((item) => item.active).toList();
+
+                if (activeEmployees.isEmpty) {
+                  return const _SimpleNotice(
+                    icon: Icons.groups_outlined,
+                    title: 'Sin trabajadores activos',
+                    message:
+                        'Crea trabajadores para llenar la planilla diaria.',
+                  );
+                }
+
+                final selectedEmployee = _selectedEmployee(activeEmployees);
+                final commonHourType = _commonHourWorkType(activeWorkTypes);
+                final selectedWorkTypes = selectedEmployee == null
+                    ? const <WorkType>[]
+                    : _allowedWorkTypes(
+                        selectedEmployee,
+                        activeWorkTypes,
+                        permissionMap,
+                      ).where((item) => item.id != commonHourType?.id).toList();
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _EmployeePicker(
+                      employees: activeEmployees,
+                      employeeId: _employeeId,
+                      onChanged: (value) {
+                        setState(() {
+                          _employeeId = value;
+                          _clearAll();
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    if (selectedEmployee == null)
+                      const _SimpleNotice(
+                        icon: Icons.person_search_outlined,
+                        title: 'Selecciona trabajador',
+                        message:
+                            'Primero elige un trabajador para ver sus trabajos asignados.',
+                      )
+                    else ...[
+                      _EmployeeSheetSection(
+                        employee: selectedEmployee,
+                        workTypes: selectedWorkTypes,
+                        commonHourType: commonHourType,
+                        quantityController: (workTypeId) => _quantityController(
+                            selectedEmployee.id, workTypeId),
+                        commonHoursController:
+                            _commonHoursController(selectedEmployee.id),
+                        noteController: _noteController(selectedEmployee.id),
+                        startTime: _startTimes[selectedEmployee.id],
+                        endTime: _endTimes[selectedEmployee.id],
+                        restMinutes: _automaticRestMinutes(selectedEmployee.id),
+                        onPickStart: () =>
+                            _pickTime(selectedEmployee.id, isStart: true),
+                        onPickEnd: () =>
+                            _pickTime(selectedEmployee.id, isStart: false),
+                        onClear: () => _clearEmployee(selectedEmployee.id),
+                      ),
+                      const SizedBox(height: 12),
+                      FilledButton.icon(
+                        onPressed: _saving
+                            ? null
+                            : () => _submitSheet(
+                                  selectedEmployee,
+                                  selectedWorkTypes,
+                                  commonHourType,
+                                ),
+                        icon: _saving
+                            ? const SizedBox.square(
+                                dimension: 18,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.send_outlined),
+                        label: Text(
+                          _saving
+                              ? 'Guardando...'
+                              : 'Enviar planilla de ${selectedEmployee.fullName}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ],
+                );
+              },
             ),
-            onChanged: (value) {
-              if (value.trim().isNotEmpty && _employeeId != null) {
-                setState(() => _employeeId = null);
-              }
-            },
           ),
-          TextButton.icon(
-            onPressed: _createEmployee,
-            icon: const Icon(Icons.person_add_alt),
-            label: const Text('Guardar nuevo trabajador'),
-          ),
-          const SizedBox(height: 8),
-          workTypes.when(
-            loading: () => const LinearProgressIndicator(),
-            error: (error, _) => Text('No se cargaron tipos de trabajo: $error'),
-            data: (items) => _workTypeDropdown(items.where((e) => e.active).toList()),
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _inlineWorkType,
-            decoration: const InputDecoration(
-              labelText: 'Escribir trabajo si no esta en la lista',
-              prefixIcon: Icon(Icons.edit_note_outlined),
-              hintText: 'Ej: Fundir silicato',
-            ),
-            onChanged: (value) {
-              if (value.trim().isNotEmpty && _workTypeId != null) {
-                setState(() => _workTypeId = null);
-              }
-            },
-          ),
-          TextButton.icon(
-            onPressed: _createWorkType,
-            icon: const Icon(Icons.add_business_outlined),
-            label: const Text('Guardar nuevo trabajo'),
-          ),
-          const SizedBox(height: 12),
-          TextFormField(
-            controller: _quantity,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(
-              labelText: 'Cantidad',
-              prefixIcon: Icon(Icons.numbers),
-            ),
-            validator: (value) {
-              final parsed = double.tryParse(value?.replaceAll(',', '.') ?? '');
-              if (parsed == null || parsed <= 0) return 'Ingresa una cantidad valida';
-              return null;
-            },
-          ),
-          const SizedBox(height: 12),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Fecha'),
-            subtitle: Text(dateFormat.format(_workDate)),
-            trailing: const Icon(Icons.calendar_month_outlined),
-            onTap: _pickDate,
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _note,
-            minLines: 3,
-            maxLines: 6,
-            decoration: const InputDecoration(
-              labelText: 'Notas del trabajo',
-              prefixIcon: Icon(Icons.notes_outlined),
-              hintText: 'Ej: trabajo en cisterna grande, llego tarde, faltaron bolsas',
-            ),
-          ),
-          const SizedBox(height: 20),
-          FilledButton.icon(
-            onPressed: _saving ? null : _save,
-            icon: const Icon(Icons.send_outlined),
-            label: const Text('Enviar registro'),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
-  Widget _workTypeDropdown(List<WorkType> items) {
-    return DropdownButtonFormField<String>(
-      value: _workTypeId,
-      decoration: const InputDecoration(
-        labelText: 'Tipo de trabajo',
-        prefixIcon: Icon(Icons.work_outline),
-      ),
-      items: [
-        for (final item in items)
-          DropdownMenuItem(
-            value: item.id,
-            child: Text('${item.name} (${item.unit})'),
-          ),
-      ],
-      onChanged: (value) => setState(() => _workTypeId = value),
+  Employee? _selectedEmployee(List<Employee> activeEmployees) {
+    final employeeId = _employeeId;
+    if (employeeId == null) return null;
+    for (final employee in activeEmployees) {
+      if (employee.id == employeeId) return employee;
+    }
+    return null;
+  }
+
+  List<WorkType> _allowedWorkTypes(
+    Employee employee,
+    List<WorkType> activeWorkTypes,
+    Map<String, Set<String>> permissionMap,
+  ) {
+    if (!employee.restrictWorkTypes) return activeWorkTypes;
+    final allowedIds = permissionMap[employee.id] ?? <String>{};
+    return activeWorkTypes
+        .where((item) => allowedIds.contains(item.id))
+        .toList();
+  }
+
+  WorkType? _commonHourWorkType(List<WorkType> activeWorkTypes) {
+    for (final item in activeWorkTypes) {
+      final code = item.code.toLowerCase().trim();
+      final name = item.name.toLowerCase().trim();
+      if (item.unit == 'hour' &&
+          (code == 'hora_comun' ||
+              code == 'horas_comunes' ||
+              name.contains('hora comun') ||
+              name.contains('horas comunes'))) {
+        return item;
+      }
+    }
+
+    for (final item in activeWorkTypes) {
+      if (item.unit == 'hour' && item.category == 'hourly') return item;
+    }
+    return null;
+  }
+
+  TextEditingController _quantityController(
+    String employeeId,
+    String workTypeId,
+  ) {
+    final key = '$employeeId:$workTypeId';
+    return _quantityControllers.putIfAbsent(
+      key,
+      () => TextEditingController(),
     );
   }
 
-  Widget _employeeDropdown(List<Employee> items) {
-    return DropdownButtonFormField<String>(
-      value: _employeeId,
-      decoration: const InputDecoration(
-        labelText: 'Trabajador',
-        prefixIcon: Icon(Icons.person_outline),
-      ),
-      items: [
-        for (final item in items)
-          DropdownMenuItem(value: item.id, child: Text(item.fullName)),
-      ],
-      onChanged: (value) => setState(() => _employeeId = value),
+  TextEditingController _commonHoursController(String employeeId) {
+    return _commonHoursControllers.putIfAbsent(
+      employeeId,
+      () => TextEditingController(),
+    );
+  }
+
+  TextEditingController _noteController(String employeeId) {
+    return _noteControllers.putIfAbsent(
+      employeeId,
+      () => TextEditingController(),
     );
   }
 
@@ -191,173 +241,648 @@ class _OperatorNewEntryScreenState extends ConsumerState<OperatorNewEntryScreen>
       lastDate: DateTime.now().add(const Duration(days: 7)),
       initialDate: _workDate,
     );
-    if (picked != null) {
-      setState(() => _workDate = picked);
-    }
+    if (picked == null || !mounted) return;
+    setState(() => _workDate = picked);
   }
 
-  Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) return;
+  Future<void> _pickTime(String employeeId, {required bool isStart}) async {
+    final current = isStart ? _startTimes[employeeId] : _endTimes[employeeId];
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: current ?? TimeOfDay.now(),
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      if (isStart) {
+        _startTimes[employeeId] = picked;
+      } else {
+        _endTimes[employeeId] = picked;
+      }
+    });
+  }
+
+  Future<void> _submitSheet(
+    Employee employee,
+    List<WorkType> workTypes,
+    WorkType? commonHourType,
+  ) async {
     final profile = await ref.read(currentProfileProvider.future);
     if (profile == null || !profile.isOperator) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Tu usuario no puede enviar registros.')),
+      _showMessage('Tu usuario no puede enviar registros.');
+      return;
+    }
+
+    final drafts = <OperatorEntryDraft>[];
+    final note = _noteController(employee.id).text;
+    final startTime = _toParts(_startTimes[employee.id]);
+    final endTime = _toParts(_endTimes[employee.id]);
+    final restMinutes = _automaticRestMinutes(employee.id);
+    final manualCommonHours =
+        _parseQuantity(_commonHoursController(employee.id).text);
+
+    for (final workType in workTypes) {
+      final controller = _quantityController(employee.id, workType.id);
+      final quantity = _parseQuantity(controller.text);
+      if (quantity == null || quantity <= 0) continue;
+
+      drafts.add(
+        OperatorEntryDraft(
+          employeeId: employee.id,
+          workTypeId: workType.id,
+          workDate: _workDate,
+          quantity: quantity,
+          status: 'pending',
+          attendanceStatus: 'presente',
+          startTime: startTime,
+          endTime: endTime,
+          restMinutes: restMinutes,
+          note: note,
+        ),
+      );
+    }
+
+    final grossHours = _grossWorkedHours(employee.id);
+    final automaticCommonHours = drafts.isEmpty && manualCommonHours == null
+        ? _netWorkedHours(employee.id)
+        : null;
+    final commonHours = manualCommonHours ?? automaticCommonHours;
+    if (commonHours != null && commonHours > 0) {
+      if (commonHourType == null) {
+        _showMessage(
+          'Crea o activa el tipo de trabajo "Hora comun" para guardar horas.',
+        );
+        return;
+      }
+      drafts.insert(
+        0,
+        OperatorEntryDraft(
+          employeeId: employee.id,
+          workTypeId: commonHourType.id,
+          workDate: _workDate,
+          quantity: commonHours,
+          status: 'pending',
+          attendanceStatus: 'presente',
+          startTime: startTime,
+          endTime: endTime,
+          restMinutes: restMinutes,
+          note: note,
+        ),
+      );
+    }
+
+    if (drafts.isEmpty) {
+      _showMessage(
+        grossHours == null
+            ? 'Llena al menos una casilla o marca entrada y salida.'
+            : 'No se pudieron calcular horas comunes.',
       );
       return;
     }
 
     setState(() => _saving = true);
     try {
-      final employeeId = await _resolveEmployeeId();
-      final workTypeId = await _resolveWorkTypeId();
-      if (employeeId == null || workTypeId == null) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Selecciona o escribe trabajador y trabajo.'),
-          ),
-        );
-        return;
-      }
-
-      await ref.read(operatorEntriesRepositoryProvider).create(
-            employeeId: employeeId,
-            workTypeId: workTypeId,
-            workDate: _workDate,
-            quantity: double.parse(_quantity.text.replaceAll(',', '.')),
-            note: _note.text,
-          );
+      await ref.read(operatorEntriesRepositoryProvider).createMany(drafts);
       ref.invalidate(operatorEntriesProvider);
       if (!mounted) return;
+      _clearAll();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Registro enviado para revision.')),
+        SnackBar(
+            content: Text(
+                '${employee.fullName}: ${drafts.length} lineas enviadas.')),
       );
       context.go('/operator/entries');
     } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudo guardar: $error')),
-      );
+      _showMessage('No se pudo guardar la planilla: $error');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
   }
 
-  Future<void> _createEmployee() async {
-    final name = await _askText(
-      title: 'Agregar trabajador',
-      label: 'Nombre del trabajador',
-      controller: _newEmployee,
+  double? _parseQuantity(String value) {
+    final text = value.trim().replaceAll(',', '.');
+    if (text.isEmpty) return null;
+    return double.tryParse(text);
+  }
+
+  void _clearEmployee(String employeeId) {
+    setState(() {
+      for (final entry in _quantityControllers.entries) {
+        if (entry.key.startsWith('$employeeId:')) entry.value.clear();
+      }
+      _noteControllers[employeeId]?.clear();
+      _commonHoursControllers[employeeId]?.clear();
+      _startTimes.remove(employeeId);
+      _endTimes.remove(employeeId);
+    });
+  }
+
+  void _clearAll() {
+    for (final controller in _quantityControllers.values) {
+      controller.clear();
+    }
+    for (final controller in _noteControllers.values) {
+      controller.clear();
+    }
+    for (final controller in _commonHoursControllers.values) {
+      controller.clear();
+    }
+    _startTimes.clear();
+    _endTimes.clear();
+  }
+
+  double? _grossWorkedHours(String employeeId) {
+    final startTime = _startTimes[employeeId];
+    final endTime = _endTimes[employeeId];
+    if (startTime == null || endTime == null) return null;
+    final start = startTime.hour * 60 + startTime.minute;
+    var end = endTime.hour * 60 + endTime.minute;
+    if (end < start) end += 24 * 60;
+    final minutes = end - start;
+    if (minutes <= 0) return null;
+    return minutes / 60;
+  }
+
+  int _automaticRestMinutes(String employeeId) {
+    final grossHours = _grossWorkedHours(employeeId);
+    if (grossHours == null) return 0;
+    return grossHours > 7 ? 30 : 0;
+  }
+
+  double? _netWorkedHours(String employeeId) {
+    final grossHours = _grossWorkedHours(employeeId);
+    if (grossHours == null) return null;
+    final net = grossHours - (_automaticRestMinutes(employeeId) / 60);
+    return net <= 0 ? null : double.parse(net.toStringAsFixed(2));
+  }
+
+  TimeOfDayParts? _toParts(TimeOfDay? time) {
+    if (time == null) return null;
+    return TimeOfDayParts(time.hour, time.minute);
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
     );
-    if (name == null) return;
-    final code = name
-        .toLowerCase()
-        .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
-        .replaceAll(RegExp(r'^_|_$'), '');
-    final employee = await ref.read(employeesRepositoryProvider).saveReturning(
-          code: code.isEmpty ? DateTime.now().millisecondsSinceEpoch.toString() : code,
-          fullName: name,
-        );
-    setState(() => _employeeId = employee.id);
-    ref.invalidate(employeesProvider);
   }
+}
 
-  Future<void> _createWorkType() async {
-    final name = await _askText(
-      title: 'Agregar trabajo',
-      label: 'Nombre del trabajo',
-      controller: _newWorkType,
-    );
-    if (name == null) return;
-    final code = name
-        .toLowerCase()
-        .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
-        .replaceAll(RegExp(r'^_|_$'), '');
-    final workType = await ref.read(workTypesRepositoryProvider).saveReturning(
-          code: code.isEmpty ? DateTime.now().millisecondsSinceEpoch.toString() : code,
-          name: name,
-          unit: 'unit',
-          category: 'quantity',
-          active: true,
-        );
-    setState(() => _workTypeId = workType.id);
-    ref.invalidate(workTypesProvider);
-  }
+class _SheetHeader extends StatelessWidget {
+  const _SheetHeader({
+    required this.date,
+    required this.onPickDate,
+  });
 
-  Future<String?> _resolveEmployeeId() async {
-    if (_inlineEmployee.text.trim().isEmpty) return _employeeId;
-    final id = await _createEmployeeFromName(_inlineEmployee.text.trim());
-    _inlineEmployee.clear();
-    ref.invalidate(employeesProvider);
-    return id;
-  }
+  final String date;
+  final VoidCallback onPickDate;
 
-  Future<String?> _resolveWorkTypeId() async {
-    if (_inlineWorkType.text.trim().isEmpty) return _workTypeId;
-    final id = await _createWorkTypeFromName(_inlineWorkType.text.trim());
-    _inlineWorkType.clear();
-    ref.invalidate(workTypesProvider);
-    return id;
-  }
-
-  Future<String> _createEmployeeFromName(String name) async {
-    final code = _codeFromName(name);
-    final row = await ref.read(employeesRepositoryProvider).saveReturning(
-          code: code,
-          fullName: name,
-        );
-    return row.id;
-  }
-
-  Future<String> _createWorkTypeFromName(String name) async {
-    final code = _codeFromName(name);
-    final row = await ref.read(workTypesRepositoryProvider).saveReturning(
-          code: code,
-          name: name,
-          unit: 'unit',
-          category: 'quantity',
-          active: true,
-        );
-    return row.id;
-  }
-
-  String _codeFromName(String name) {
-    final code = name
-        .toLowerCase()
-        .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
-        .replaceAll(RegExp(r'^_|_$'), '');
-    return code.isEmpty ? DateTime.now().millisecondsSinceEpoch.toString() : code;
-  }
-
-  Future<String?> _askText({
-    required String title,
-    required String label,
-    required TextEditingController controller,
-  }) async {
-    controller.clear();
-    return showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: TextField(
-          controller: controller,
-          decoration: InputDecoration(labelText: label),
-          autofocus: true,
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.table_view_outlined),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Planilla diaria',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Toca una casilla, escribe la cantidad y guarda todo junto.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minWidth: 210),
+                child: OutlinedButton.icon(
+                  onPressed: onPickDate,
+                  icon: const Icon(Icons.calendar_month_outlined),
+                  label: Text(
+                    date,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancelar'),
+      ),
+    );
+  }
+}
+
+class _EmployeePicker extends StatelessWidget {
+  const _EmployeePicker({
+    required this.employees,
+    required this.employeeId,
+    required this.onChanged,
+  });
+
+  final List<Employee> employees;
+  final String? employeeId;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              '1. Elige trabajador',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 10),
+            DropdownButtonFormField<String>(
+              initialValue: employeeId,
+              isExpanded: true,
+              iconSize: 32,
+              decoration: InputDecoration(
+                labelText: 'Trabajador',
+                helperText: 'Despues veras solo sus trabajos asignados.',
+                prefixIcon: Icon(
+                  Icons.person_outline,
+                  color: colorScheme.primary,
+                ),
+              ),
+              items: [
+                for (final employee in employees)
+                  DropdownMenuItem(
+                    value: employee.id,
+                    child: Text(
+                      '${employee.code} - ${employee.fullName}',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+              ],
+              onChanged: onChanged,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _EmployeeSheetSection extends StatelessWidget {
+  const _EmployeeSheetSection({
+    required this.employee,
+    required this.workTypes,
+    required this.commonHourType,
+    required this.quantityController,
+    required this.commonHoursController,
+    required this.noteController,
+    required this.startTime,
+    required this.endTime,
+    required this.restMinutes,
+    required this.onPickStart,
+    required this.onPickEnd,
+    required this.onClear,
+  });
+
+  final Employee employee;
+  final List<WorkType> workTypes;
+  final WorkType? commonHourType;
+  final TextEditingController Function(String workTypeId) quantityController;
+  final TextEditingController commonHoursController;
+  final TextEditingController noteController;
+  final TimeOfDay? startTime;
+  final TimeOfDay? endTime;
+  final int restMinutes;
+  final VoidCallback onPickStart;
+  final VoidCallback onPickEnd;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: colorScheme.primaryContainer.withValues(alpha: 0.75),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: colorScheme.primaryContainer),
+              ),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 24,
+                    backgroundColor: colorScheme.primary,
+                    foregroundColor: colorScheme.onPrimary,
+                    child: Text(_initials(employee.fullName)),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          employee.fullName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style:
+                              Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Codigo ${employee.code}',
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton.filledTonal(
+                    tooltip: 'Limpiar trabajador',
+                    onPressed: onClear,
+                    icon: const Icon(Icons.cleaning_services_outlined),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              '2. Llena sus trabajos u horas',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 10),
+            if (commonHourType != null) ...[
+              _WorkQuantityField(
+                workType: commonHourType!,
+                controller: commonHoursController,
+                highlight: true,
+              ),
+              const SizedBox(height: 10),
+            ],
+            if (workTypes.isEmpty)
+              Text(
+                commonHourType == null
+                    ? 'Sin trabajos permitidos.'
+                    : 'No hay otros trabajos asignados.',
+                style: TextStyle(color: colorScheme.onSurfaceVariant),
+              )
+            else
+              for (final workType in workTypes) ...[
+                _WorkQuantityField(
+                  workType: workType,
+                  controller: quantityController(workType.id),
+                ),
+                const SizedBox(height: 10),
+              ],
+            const SizedBox(height: 10),
+            Text(
+              '3. Entrada y salida',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 2),
+            Text(
+              'Si solo marcas entrada y salida, se guardara como Hora comun.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onPickStart,
+                    icon: const Icon(Icons.login_outlined),
+                    label: Text(
+                      startTime == null
+                          ? 'Entrada'
+                          : startTime!.format(context),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onPickEnd,
+                    icon: const Icon(Icons.logout_outlined),
+                    label: Text(
+                      endTime == null ? 'Salida' : endTime!.format(context),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (restMinutes > 0) ...[
+              const SizedBox(height: 10),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: colorScheme.secondaryContainer,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.timer_outlined),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Descanso automatico: $restMinutes min',
+                        style: TextStyle(
+                          color: colorScheme.onSecondaryContainer,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: 10),
+            TextField(
+              controller: noteController,
+              minLines: 1,
+              maxLines: 3,
+              textInputAction: TextInputAction.done,
+              decoration: const InputDecoration(
+                labelText: 'Nota opcional',
+                prefixIcon: Icon(Icons.notes_outlined),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _initials(String fullName) {
+    final parts = fullName.trim().split(RegExp(r'\s+'));
+    if (parts.isEmpty || parts.first.isEmpty) return '?';
+    if (parts.length == 1) return parts.first[0].toUpperCase();
+    return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
+  }
+}
+
+class _WorkQuantityField extends StatelessWidget {
+  const _WorkQuantityField({
+    required this.workType,
+    required this.controller,
+    this.highlight = false,
+  });
+
+  final WorkType workType;
+  final TextEditingController controller;
+  final bool highlight;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: highlight
+            ? colorScheme.primaryContainer.withValues(alpha: 0.62)
+            : colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: highlight ? colorScheme.primary : colorScheme.outlineVariant,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            highlight ? '${workType.name} (total)' : workType.name,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
           ),
-          FilledButton(
-            onPressed: () {
-              final value = controller.text.trim();
-              Navigator.of(context).pop(value.isEmpty ? null : value);
-            },
-            child: const Text('Guardar'),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              SizedBox.square(
+                dimension: 52,
+                child: IconButton.filledTonal(
+                  tooltip: 'Restar',
+                  onPressed: () => _adjust(-1),
+                  icon: const Icon(Icons.remove),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  controller: controller,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  textInputAction: TextInputAction.next,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.w900,
+                      ),
+                  decoration: InputDecoration(
+                    hintText: '0',
+                    suffixText: _unitLabel(workType.unit),
+                  ),
+                  onTap: () => controller.selection = TextSelection(
+                    baseOffset: 0,
+                    extentOffset: controller.text.length,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox.square(
+                dimension: 52,
+                child: IconButton.filled(
+                  tooltip: 'Sumar',
+                  onPressed: () => _adjust(1),
+                  icon: const Icon(Icons.add),
+                ),
+              ),
+            ],
           ),
         ],
+      ),
+    );
+  }
+
+  void _adjust(double delta) {
+    final current =
+        double.tryParse(controller.text.trim().replaceAll(',', '.'));
+    final next = ((current ?? 0) + delta).clamp(0, 9999).toDouble();
+    final normalized = next % 1 == 0
+        ? next.toInt().toString()
+        : next.toStringAsFixed(1).replaceAll('.', ',');
+    controller
+      ..text = normalized
+      ..selection = TextSelection.collapsed(offset: normalized.length);
+  }
+
+  String _unitLabel(String unit) {
+    return switch (unit) {
+      'hour' => 'h',
+      'day' => 'dia',
+      'unit' => 'u',
+      'service' => 's',
+      'bag' => 'b',
+      'bucket' => 't',
+      'tray' => 'bd',
+      _ => unit,
+    };
+  }
+}
+
+class _SimpleNotice extends StatelessWidget {
+  const _SimpleNotice({
+    required this.icon,
+    required this.title,
+    required this.message,
+  });
+
+  final IconData icon;
+  final String title;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          children: [
+            Icon(icon, size: 42),
+            const SizedBox(height: 8),
+            Text(title, style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 4),
+            Text(message, textAlign: TextAlign.center),
+          ],
+        ),
       ),
     );
   }

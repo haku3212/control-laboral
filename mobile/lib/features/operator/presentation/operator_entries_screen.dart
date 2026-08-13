@@ -4,66 +4,491 @@ import 'package:intl/intl.dart';
 
 import '../../../shared/widgets/async_value_view.dart';
 import '../../../shared/widgets/empty_state.dart';
+import '../data/operator_entry.dart';
 import '../data/operator_entries_repository.dart';
 
-class OperatorEntriesScreen extends ConsumerWidget {
+class OperatorEntriesScreen extends ConsumerStatefulWidget {
   const OperatorEntriesScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final entries = ref.watch(operatorEntriesProvider);
+  ConsumerState<OperatorEntriesScreen> createState() =>
+      _OperatorEntriesScreenState();
+}
+
+class _OperatorEntriesScreenState extends ConsumerState<OperatorEntriesScreen> {
+  DateTime _selectedDate = DateTime.now();
+
+  @override
+  Widget build(BuildContext context) {
+    final entries = ref.watch(operatorEntriesByDateProvider(_selectedDate));
     final dateFormat = DateFormat('dd/MM/yyyy', 'es_BO');
 
     return AsyncValueView(
       value: entries,
       data: (items) {
-        if (items.isEmpty) {
-          return const EmptyState(
-            icon: Icons.history_outlined,
-            title: 'Sin registros',
-            message: 'Tus registros enviados apareceran aqui.',
-          );
-        }
+        final groups = _groupEntries(items);
+
         return RefreshIndicator(
-          onRefresh: () async => ref.invalidate(operatorEntriesProvider),
-          child: ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: items.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 8),
-            itemBuilder: (context, index) {
-              final item = items[index];
-              return Card(
-                child: ListTile(
-                  leading: const Icon(Icons.assignment_outlined),
-                  title: Text('${item.employeeName} - ${item.workTypeName}'),
-                  subtitle: Text(
-                    '${dateFormat.format(item.workDate)} - ${_formatQuantity(item.quantity)} ${item.workTypeUnit}'
-                    '${item.note == null ? '' : '\n${item.note}'}',
+          onRefresh: () async =>
+              ref.invalidate(operatorEntriesByDateProvider(_selectedDate)),
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+            children: [
+              _DateHeader(
+                date: dateFormat.format(_selectedDate),
+                onPrevious: _selectedDate.isAfter(_oldestVisibleDate)
+                    ? () => _moveDate(-1)
+                    : null,
+                onNext: !_isSameDay(_selectedDate, DateTime.now())
+                    ? () => _moveDate(1)
+                    : null,
+                onPick: _pickDate,
+                onToday: _setToday,
+              ),
+              const SizedBox(height: 12),
+              _OperatorEntriesSummary(items: items),
+              const SizedBox(height: 12),
+              if (items.isEmpty)
+                const EmptyState(
+                  icon: Icons.history_outlined,
+                  title: 'Sin registros ese dia',
+                  message: 'Tus registros enviados apareceran aqui por fecha.',
+                )
+              else
+                for (final group in groups) ...[
+                  _OperatorEntryGroupCard(
+                    group: group,
+                    date: dateFormat.format(group.workDate),
                   ),
-                  isThreeLine: item.note != null,
-                  trailing: Chip(label: Text(_statusLabel(item.status))),
-                ),
-              );
-            },
+                  const SizedBox(height: 10),
+                ],
+            ],
           ),
         );
       },
     );
   }
 
-  String _statusLabel(String status) {
-    return switch (status) {
-      'draft' => 'Pendiente',
-      'confirmed' => 'Confirmado',
-      'corrected' => 'Corregido',
-      'void' => 'Anulado',
-      _ => status,
+  DateTime get _oldestVisibleDate {
+    final cutoff = DateTime.now().subtract(const Duration(days: 92));
+    return DateTime(cutoff.year, cutoff.month, cutoff.day);
+  }
+
+  void _moveDate(int days) {
+    setState(() {
+      final next = DateTime(
+        _selectedDate.year,
+        _selectedDate.month,
+        _selectedDate.day + days,
+      );
+      if (next.isBefore(_oldestVisibleDate)) {
+        _selectedDate = _oldestVisibleDate;
+      } else if (next.isAfter(DateTime.now())) {
+        _selectedDate = DateTime.now();
+      } else {
+        _selectedDate = next;
+      }
+    });
+  }
+
+  void _setToday() {
+    setState(() => _selectedDate = DateTime.now());
+  }
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      firstDate: _oldestVisibleDate,
+      lastDate: DateTime.now(),
+      initialDate: _selectedDate,
+    );
+    if (picked == null) return;
+    setState(() => _selectedDate = picked);
+  }
+
+  bool _isSameDay(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
+  List<_OperatorEntryGroup> _groupEntries(List<OperatorEntry> items) {
+    final grouped = <String, List<OperatorEntry>>{};
+    for (final item in items) {
+      final day =
+          DateTime(item.workDate.year, item.workDate.month, item.workDate.day);
+      final key =
+          '${item.employeeName}|${day.toIso8601String()}|${item.status}';
+      grouped.putIfAbsent(key, () => []).add(item);
+    }
+    final groups = [
+      for (final entry in grouped.entries)
+        _OperatorEntryGroup(
+          employeeName: entry.value.first.employeeName,
+          workDate: entry.value.first.workDate,
+          status: entry.value.first.status,
+          items: entry.value,
+        ),
+    ];
+    groups.sort((a, b) => b.workDate.compareTo(a.workDate));
+    return groups;
+  }
+}
+
+class _DateHeader extends StatelessWidget {
+  const _DateHeader({
+    required this.date,
+    required this.onPrevious,
+    required this.onNext,
+    required this.onPick,
+    required this.onToday,
+  });
+
+  final String date;
+  final VoidCallback? onPrevious;
+  final VoidCallback? onNext;
+  final VoidCallback onPick;
+  final VoidCallback onToday;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                IconButton(
+                  tooltip: 'Dia anterior',
+                  onPressed: onPrevious,
+                  icon: const Icon(Icons.chevron_left),
+                ),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onPick,
+                    icon: const Icon(Icons.event_outlined),
+                    label: Text(date),
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Dia siguiente',
+                  onPressed: onNext,
+                  icon: const Icon(Icons.chevron_right),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            TextButton.icon(
+              onPressed: onToday,
+              icon: const Icon(Icons.today_outlined),
+              label: const Text('Ver hoy'),
+            ),
+            Text(
+              'Se muestra solo un dia. Historial visible: ultimos 3 meses.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _OperatorEntryGroup {
+  const _OperatorEntryGroup({
+    required this.employeeName,
+    required this.workDate,
+    required this.status,
+    required this.items,
+  });
+
+  final String employeeName;
+  final DateTime workDate;
+  final String status;
+  final List<OperatorEntry> items;
+}
+
+class _OperatorEntriesSummary extends StatelessWidget {
+  const _OperatorEntriesSummary({required this.items});
+
+  final List<OperatorEntry> items;
+
+  @override
+  Widget build(BuildContext context) {
+    final pending = items.where((item) => item.status == 'pending').length;
+    final confirmed = items.where((item) => item.status == 'confirmed').length;
+
+    return Card(
+      color: Theme.of(context).colorScheme.primaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Resumen del dia',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onPrimaryContainer,
+                    fontWeight: FontWeight.w800,
+                  ),
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _SummaryPill(label: 'Lineas', value: '${items.length}'),
+                _SummaryPill(label: 'Pendientes', value: '$pending'),
+                _SummaryPill(label: 'Confirmados', value: '$confirmed'),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SummaryPill extends StatelessWidget {
+  const _SummaryPill({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: colorScheme.surface.withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            value,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+          ),
+          const SizedBox(width: 6),
+          Text(label),
+        ],
+      ),
+    );
+  }
+}
+
+class _OperatorEntryGroupCard extends StatelessWidget {
+  const _OperatorEntryGroupCard({
+    required this.group,
+    required this.date,
+  });
+
+  final _OperatorEntryGroup group;
+  final String date;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  backgroundColor:
+                      Theme.of(context).colorScheme.primaryContainer,
+                  child: Icon(
+                    _workIcon(group.items.first.workTypeUnit),
+                    color: Theme.of(context).colorScheme.onPrimaryContainer,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        group.employeeName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                      Text(
+                        '${group.items.length} trabajos enviados',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                Flexible(child: _StatusChip(status: group.status)),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _InfoPill(icon: Icons.calendar_today_outlined, text: date),
+                _InfoPill(
+                  icon: Icons.format_list_bulleted,
+                  text: '${group.items.length} lineas',
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            for (final item in group.items) ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      item.workTypeName,
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                  ),
+                  Text(
+                    _quantityText(item.quantity, item.workTypeUnit),
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                ],
+              ),
+              if (item.note != null && item.note!.trim().isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(item.note!),
+                ),
+              if (item != group.items.last) const Divider(height: 16),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _quantityText(double quantity, String unit) {
+    if (unit == 'hour') return _formatHours(quantity);
+    final value = quantity == quantity.roundToDouble()
+        ? quantity.toStringAsFixed(0)
+        : quantity.toStringAsFixed(2);
+    return '$value ${_unitLabel(unit)}';
+  }
+
+  String _formatHours(double hours) {
+    final totalMinutes = (hours * 60).round();
+    final h = totalMinutes ~/ 60;
+    final minutes = totalMinutes % 60;
+    if (minutes == 0) return '$h h';
+    return '$h h ${minutes.toString().padLeft(2, '0')} min';
+  }
+
+  IconData _workIcon(String unit) {
+    return switch (unit) {
+      'hour' => Icons.schedule_outlined,
+      'day' => Icons.calendar_today_outlined,
+      'bag' => Icons.shopping_bag_outlined,
+      'bucket' => Icons.inventory_2_outlined,
+      'tray' => Icons.table_bar_outlined,
+      _ => Icons.assignment_outlined,
     };
   }
 
-  String _formatQuantity(double value) {
-    return value == value.roundToDouble()
-        ? value.toStringAsFixed(0)
-        : value.toStringAsFixed(2);
+  String _unitLabel(String value) {
+    return switch (value) {
+      'hour' => 'h',
+      'day' => 'dia',
+      'unit' => 'unid.',
+      'service' => 'serv.',
+      'bag' => 'bolsa',
+      'bucket' => 'tacho',
+      'tray' => 'bandeja',
+      _ => value,
+    };
+  }
+}
+
+class _InfoPill extends StatelessWidget {
+  const _InfoPill({
+    required this.icon,
+    required this.text,
+  });
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16),
+          const SizedBox(width: 6),
+          Text(text),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatusChip extends StatelessWidget {
+  const _StatusChip({required this.status});
+
+  final String status;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final (label, color, icon) = switch (status) {
+      'confirmed' => (
+          'Confirmado',
+          colorScheme.primaryContainer,
+          Icons.check_circle_outline,
+        ),
+      'corrected' => (
+          'Corregido',
+          colorScheme.tertiaryContainer,
+          Icons.edit_note_outlined,
+        ),
+      'rejected' => (
+          'Rechazado',
+          colorScheme.errorContainer,
+          Icons.block,
+        ),
+      'void' => (
+          'Anulado',
+          colorScheme.surfaceContainerHighest,
+          Icons.cancel_outlined,
+        ),
+      _ => (
+          'Pendiente',
+          colorScheme.secondaryContainer,
+          Icons.pending_actions,
+        ),
+    };
+
+    return Chip(
+      avatar: Icon(icon, size: 18),
+      label: Text(label),
+      backgroundColor: color,
+      side: BorderSide.none,
+      visualDensity: VisualDensity.compact,
+    );
   }
 }

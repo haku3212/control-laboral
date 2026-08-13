@@ -12,34 +12,73 @@ class AppShell extends ConsumerWidget {
 
   static const _adminDestinations = [
     _Destination('/dashboard', Icons.home_outlined, Icons.home, 'Inicio'),
-    _Destination('/entries', Icons.assignment_outlined, Icons.assignment, 'Registros'),
+    _Destination(
+      '/entries',
+      Icons.assignment_outlined,
+      Icons.assignment,
+      'Registros',
+    ),
     _Destination('/payroll', Icons.payments_outlined, Icons.payments, 'Pagos'),
-    _Destination('/reports', Icons.bar_chart_outlined, Icons.bar_chart, 'Reportes'),
+    _Destination(
+      '/reports',
+      Icons.bar_chart_outlined,
+      Icons.bar_chart,
+      'Reportes',
+    ),
     _Destination('/more', Icons.more_horiz, Icons.more, 'Mas'),
   ];
 
   static const _operatorDestinations = [
     _Destination('/operator', Icons.home_outlined, Icons.home, 'Inicio'),
-    _Destination('/operator/new', Icons.add_task_outlined, Icons.add_task, 'Registrar'),
-    _Destination('/operator/entries', Icons.history_outlined, Icons.history, 'Mis registros'),
+    _Destination(
+      '/operator/new',
+      Icons.table_view_outlined,
+      Icons.table_view,
+      'Planilla',
+    ),
+    _Destination(
+      '/operator/entries',
+      Icons.history_outlined,
+      Icons.history,
+      'Enviados',
+    ),
   ];
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final location = GoRouterState.of(context).matchedLocation;
     final profile = ref.watch(currentProfileProvider).valueOrNull;
-    final destinations =
-        profile?.isOperator == true ? _operatorDestinations : _adminDestinations;
+    final destinations = profile?.isOperator == true
+        ? _operatorDestinations
+        : _adminDestinations;
+    final routeAllowed = profile == null ||
+        (profile.isOperator
+            ? _operatorDestinations.any((d) => d.path == location)
+            : _adminDestinations.any((d) => d.path == location) ||
+                _adminSecondaryRoutes.contains(location));
+
+    if (!routeAllowed) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!context.mounted) return;
+        context.go(profile.isOperator ? '/operator' : '/dashboard');
+      });
+    }
+
     final currentIndex = destinations.indexWhere((d) => d.path == location);
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(profile?.isOperator == true ? 'Mi jornada' : 'Control Laboral'),
+        title: Text(
+          profile?.isOperator == true ? 'Planilla diaria' : 'Panel gerente',
+        ),
         actions: [
-          IconButton(
-            tooltip: 'Cerrar sesion',
-            icon: const Icon(Icons.logout),
-            onPressed: () => Supabase.instance.client.auth.signOut(),
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: IconButton.filledTonal(
+              tooltip: 'Cerrar sesion',
+              icon: const Icon(Icons.logout),
+              onPressed: () => Supabase.instance.client.auth.signOut(),
+            ),
           ),
         ],
       ),
@@ -59,6 +98,12 @@ class AppShell extends ConsumerWidget {
     );
   }
 }
+
+const _adminSecondaryRoutes = {
+  '/employees',
+  '/work-types',
+  '/rates',
+};
 
 class _Destination {
   const _Destination(this.path, this.icon, this.selectedIcon, this.label);

@@ -6,8 +6,31 @@ import '../../../shared/widgets/empty_state.dart';
 import '../data/work_type.dart';
 import '../data/work_types_repository.dart';
 
-const units = ['hour', 'unit', 'service', 'bag', 'bucket', 'tray'];
+const units = ['hour', 'day', 'unit', 'service', 'bag', 'bucket', 'tray'];
+const customUnitValue = '__custom__';
 const categories = ['hourly', 'quantity', 'attendance'];
+
+String unitLabel(String value) {
+  return switch (value) {
+    'hour' => 'Hora',
+    'day' => 'Dia',
+    'unit' => 'Unidad',
+    'service' => 'Servicio',
+    'bag' => 'Bolsa',
+    'bucket' => 'Tacho',
+    'tray' => 'Bandeja',
+    _ => value,
+  };
+}
+
+String categoryLabel(String value) {
+  return switch (value) {
+    'hourly' => 'Por horas',
+    'quantity' => 'Por cantidad',
+    'attendance' => 'Asistencia',
+    _ => value,
+  };
+}
 
 class WorkTypesScreen extends ConsumerWidget {
   const WorkTypesScreen({super.key});
@@ -36,16 +59,27 @@ class WorkTypesScreen extends ConsumerWidget {
                 final item = items[index];
                 return Card(
                   child: ListTile(
-                    leading: Icon(
-                      item.category == 'hourly'
-                          ? Icons.schedule
-                          : Icons.inventory_2_outlined,
+                    leading: CircleAvatar(
+                      child: Icon(
+                        item.category == 'hourly'
+                            ? Icons.schedule
+                            : Icons.inventory_2_outlined,
+                      ),
                     ),
                     title: Text(item.name),
-                    subtitle: Text('${item.code} - ${item.unit} - ${item.category}'),
-                    trailing: item.active
-                        ? const Icon(Icons.check_circle_outline)
-                        : const Icon(Icons.pause_circle_outline),
+                    subtitle: Text(
+                      '${item.code} - ${unitLabel(item.unit)} - ${categoryLabel(item.category)}',
+                    ),
+                    trailing: Chip(
+                      avatar: Icon(
+                        item.active
+                            ? Icons.check_circle_outline
+                            : Icons.pause_circle_outline,
+                        size: 18,
+                      ),
+                      label: Text(item.active ? 'Activo' : 'Pausado'),
+                      side: BorderSide.none,
+                    ),
                     onTap: () => _openForm(context, ref, item),
                   ),
                 );
@@ -62,10 +96,15 @@ class WorkTypesScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _openForm(BuildContext context, WidgetRef ref, WorkType? item) async {
+  Future<void> _openForm(
+    BuildContext context,
+    WidgetRef ref,
+    WorkType? item,
+  ) async {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       builder: (_) => _WorkTypeForm(item: item),
     );
     ref.invalidate(workTypesProvider);
@@ -85,6 +124,7 @@ class _WorkTypeFormState extends ConsumerState<_WorkTypeForm> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _code;
   late final TextEditingController _name;
+  late final TextEditingController _customUnit;
   late String _unit;
   late String _category;
   late bool _active;
@@ -96,7 +136,12 @@ class _WorkTypeFormState extends ConsumerState<_WorkTypeForm> {
     final item = widget.item;
     _code = TextEditingController(text: item?.code);
     _name = TextEditingController(text: item?.name);
-    _unit = item?.unit ?? units.first;
+    _unit = item == null || units.contains(item.unit)
+        ? item?.unit ?? units.first
+        : customUnitValue;
+    _customUnit = TextEditingController(
+      text: item == null || units.contains(item.unit) ? '' : item.unit,
+    );
     _category = item?.category ?? categories.first;
     _active = item?.active ?? true;
   }
@@ -105,11 +150,14 @@ class _WorkTypeFormState extends ConsumerState<_WorkTypeForm> {
   void dispose() {
     _code.dispose();
     _name.dispose();
+    _customUnit.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Padding(
       padding: EdgeInsets.only(
         left: 16,
@@ -122,54 +170,110 @@ class _WorkTypeFormState extends ConsumerState<_WorkTypeForm> {
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              Center(
+                child: Container(
+                  width: 42,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.outlineVariant,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
               Text(
-                widget.item == null ? 'Crear tipo de trabajo' : 'Editar tipo de trabajo',
-                style: Theme.of(context).textTheme.titleLarge,
+                widget.item == null
+                    ? 'Crear tipo de trabajo'
+                    : 'Editar tipo de trabajo',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.titleLarge,
               ),
               const SizedBox(height: 16),
               TextFormField(
                 controller: _code,
-                decoration: const InputDecoration(labelText: 'Codigo'),
+                decoration: const InputDecoration(
+                  labelText: 'Código',
+                  prefixIcon: Icon(Icons.badge_outlined),
+                ),
                 validator: _required,
               ),
               const SizedBox(height: 12),
               TextFormField(
                 controller: _name,
-                decoration: const InputDecoration(labelText: 'Nombre'),
+                decoration: const InputDecoration(
+                  labelText: 'Nombre',
+                  prefixIcon: Icon(Icons.work_outline),
+                ),
                 validator: _required,
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                value: _unit,
-                decoration: const InputDecoration(labelText: 'Unidad'),
+                initialValue: _unit,
+                decoration: const InputDecoration(
+                  labelText: 'Unidad',
+                  prefixIcon: Icon(Icons.straighten_outlined),
+                ),
                 items: [
                   for (final unit in units)
-                    DropdownMenuItem(value: unit, child: Text(unit)),
+                    DropdownMenuItem(value: unit, child: Text(unitLabel(unit))),
+                  const DropdownMenuItem(
+                    value: customUnitValue,
+                    child: Text('Otra unidad'),
+                  ),
                 ],
-                onChanged: (value) => setState(() => _unit = value ?? _unit),
+                onChanged: (value) => setState(() {
+                  _unit = value ?? _unit;
+                  _category = _unit == 'hour' ? 'hourly' : _category;
+                }),
               ),
+              if (_unit == customUnitValue) ...[
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _customUnit,
+                  decoration: const InputDecoration(
+                    labelText: 'Unidad manual',
+                    hintText: 'Ej: litro, viaje, caja',
+                    prefixIcon: Icon(Icons.edit_outlined),
+                  ),
+                  validator: _required,
+                ),
+              ],
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                value: _category,
-                decoration: const InputDecoration(labelText: 'Categoria'),
+                initialValue: _category,
+                decoration: const InputDecoration(
+                  labelText: 'Categoría',
+                  prefixIcon: Icon(Icons.category_outlined),
+                ),
                 items: [
                   for (final category in categories)
-                    DropdownMenuItem(value: category, child: Text(category)),
+                    DropdownMenuItem(
+                      value: category,
+                      child: Text(categoryLabel(category)),
+                    ),
                 ],
                 onChanged: (value) =>
                     setState(() => _category = value ?? _category),
               ),
               SwitchListTile(
+                contentPadding: EdgeInsets.zero,
                 value: _active,
                 title: const Text('Activo'),
+                subtitle: const Text('Disponible para nuevos registros'),
                 onChanged: (value) => setState(() => _active = value),
               ),
               const SizedBox(height: 16),
               FilledButton.icon(
                 onPressed: _saving ? null : _save,
-                icon: const Icon(Icons.save_outlined),
-                label: const Text('Guardar'),
+                icon: _saving
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.save_outlined),
+                label: Text(_saving ? 'Guardando...' : 'Guardar'),
               ),
             ],
           ),
@@ -189,7 +293,7 @@ class _WorkTypeFormState extends ConsumerState<_WorkTypeForm> {
             id: widget.item?.id,
             code: _code.text,
             name: _name.text,
-            unit: _unit,
+            unit: _normalizedUnit,
             category: _category,
             active: _active,
           );
@@ -202,5 +306,10 @@ class _WorkTypeFormState extends ConsumerState<_WorkTypeForm> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  String get _normalizedUnit {
+    if (_unit != customUnitValue) return _unit;
+    return _customUnit.text.trim().toLowerCase().replaceAll(' ', '_');
   }
 }

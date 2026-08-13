@@ -8,11 +8,8 @@ final currentProfileProvider = FutureProvider<AppProfile?>((ref) async {
   final user = client.auth.currentUser;
   if (user == null) return null;
 
-  final row = await client
-      .from('profiles')
-      .select()
-      .eq('id', user.id)
-      .maybeSingle();
+  final row =
+      await client.from('profiles').select().eq('id', user.id).maybeSingle();
 
   if (row == null) return null;
   return AppProfile.fromMap(row);

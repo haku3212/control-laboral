@@ -10,6 +10,7 @@ coverage/
 *.apk
 *.aab
 local.properties
+mobile/android/.gradle/
 
 # Supabase
 .branches/

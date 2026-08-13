@@ -3,6 +3,7 @@
 
     <application
         android:label="Control Laboral"
+        android:icon="@drawable/ic_launcher"
         android:name="${applicationName}">
         <activity
             android:name=".MainActivity"
