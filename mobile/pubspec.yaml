@@ -1,7 +1,7 @@
 name: control_laboral_ai
 description: Aplicacion Android para administrar registros laborales con Supabase.
 publish_to: "none"
-version: 0.5.6+12
+version: 0.5.7+13
 
 environment:
   sdk: ">=3.4.0 <4.0.0"

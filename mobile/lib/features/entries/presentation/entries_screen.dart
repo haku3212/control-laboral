@@ -61,10 +61,6 @@ class _EntriesScreenState extends ConsumerState<EntriesScreen> {
                       group.pendingItems.map((item) => item.id).toList(),
                       'confirmed',
                     ),
-                    onApprove: (item) =>
-                        _setStatus(context, ref, item.id, 'confirmed'),
-                    onReject: (item) => _reject(context, ref, item.id),
-                    onEdit: (item) => _editEntry(context, ref, item),
                   ),
                   const SizedBox(height: 10),
                 ],
@@ -119,30 +115,6 @@ class _EntriesScreenState extends ConsumerState<EntriesScreen> {
     setState(() => _selectedDate = picked);
   }
 
-  Future<void> _setStatus(
-    BuildContext context,
-    WidgetRef ref,
-    String id,
-    String status,
-  ) async {
-    try {
-      await ref.read(workEntriesRepositoryProvider).updateStatus(id, status);
-      ref.invalidate(workEntriesByDateProvider(_selectedDate));
-
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Registro aprobado correctamente.')),
-        );
-      }
-    } catch (error) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('No se pudo actualizar el registro: $error')),
-        );
-      }
-    }
-  }
-
   Future<void> _setGroupStatus(
     BuildContext context,
     WidgetRef ref,
@@ -163,77 +135,6 @@ class _EntriesScreenState extends ConsumerState<EntriesScreen> {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('No se pudo aprobar el grupo: $error')),
-        );
-      }
-    }
-  }
-
-  Future<void> _reject(
-    BuildContext context,
-    WidgetRef ref,
-    String id,
-  ) async {
-    final reason = await showDialog<String>(
-      context: context,
-      builder: (_) => const _RejectEntryDialog(),
-    );
-
-    if (reason == null || reason.trim().isEmpty) return;
-
-    try {
-      await ref.read(workEntriesRepositoryProvider).updateStatus(
-            id,
-            'rejected',
-            reason: reason.trim(),
-          );
-      ref.invalidate(workEntriesByDateProvider(_selectedDate));
-
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Registro rechazado correctamente.')),
-        );
-      }
-    } catch (error) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('No se pudo rechazar el registro: $error')),
-        );
-      }
-    }
-  }
-
-  Future<void> _editEntry(
-    BuildContext context,
-    WidgetRef ref,
-    WorkEntry item,
-  ) async {
-    final result = await showDialog<_EntryEditResult>(
-      context: context,
-      builder: (_) => _EditEntryDialog(
-        initialQuantity: _formatQuantity(item.quantity),
-        initialNote: item.note ?? '',
-      ),
-    );
-
-    if (result == null) return;
-
-    try {
-      await ref.read(workEntriesRepositoryProvider).updateDetails(
-            id: item.id,
-            quantity: result.quantity,
-            note: result.note,
-          );
-      ref.invalidate(workEntriesByDateProvider(_selectedDate));
-
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Registro actualizado correctamente.')),
-        );
-      }
-    } catch (error) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('No se pudo editar el registro: $error')),
         );
       }
     }
@@ -325,18 +226,12 @@ class _EmployeeEntriesGroup extends StatelessWidget {
     required this.dateFormat,
     required this.formatQuantity,
     required this.onApproveGroup,
-    required this.onApprove,
-    required this.onReject,
-    required this.onEdit,
   });
 
   final _EmployeeEntryGroupData group;
   final DateFormat dateFormat;
   final String Function(double value) formatQuantity;
   final VoidCallback onApproveGroup;
-  final void Function(WorkEntry item) onApprove;
-  final void Function(WorkEntry item) onReject;
-  final void Function(WorkEntry item) onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -382,14 +277,18 @@ class _EmployeeEntriesGroup extends StatelessWidget {
                   ),
               ],
             ),
-            if (pendingCount > 1) ...[
+            if (pendingCount > 0) ...[
               const SizedBox(height: 12),
               SizedBox(
                 width: double.infinity,
                 child: FilledButton.icon(
                   onPressed: onApproveGroup,
                   icon: const Icon(Icons.done_all_outlined),
-                  label: Text('Aprobar $pendingCount registros juntos'),
+                  label: Text(
+                    pendingCount == 1
+                        ? 'Aprobar registro'
+                        : 'Aprobar $pendingCount registros juntos',
+                  ),
                 ),
               ),
             ],
@@ -399,13 +298,6 @@ class _EmployeeEntriesGroup extends StatelessWidget {
                 item: item,
                 date: dateFormat.format(item.workDate),
                 quantity: _quantityText(item.quantity, item.unit),
-                onApprove: item.status == 'draft' || item.status == 'pending'
-                    ? () => onApprove(item)
-                    : null,
-                onReject: item.status == 'draft' || item.status == 'pending'
-                    ? () => onReject(item)
-                    : null,
-                onEdit: item.status == 'void' ? null : () => onEdit(item),
               ),
               if (item != group.items.last) const Divider(height: 18),
             ],
@@ -454,17 +346,11 @@ class _EntryLine extends StatelessWidget {
     required this.item,
     required this.date,
     required this.quantity,
-    this.onApprove,
-    this.onReject,
-    this.onEdit,
   });
 
   final WorkEntry item;
   final String date;
   final String quantity;
-  final VoidCallback? onApprove;
-  final VoidCallback? onReject;
-  final VoidCallback? onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -500,38 +386,6 @@ class _EntryLine extends StatelessWidget {
         if (item.note != null && item.note!.trim().isNotEmpty) ...[
           const SizedBox(height: 8),
           Text(item.note!),
-        ],
-        if (onApprove != null || onReject != null || onEdit != null) ...[
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              if (onEdit != null)
-                IconButton.filledTonal(
-                  tooltip: 'Editar',
-                  onPressed: onEdit,
-                  icon: const Icon(Icons.edit_outlined),
-                ),
-              if (onEdit != null) const SizedBox(width: 8),
-              if (onReject != null)
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: onReject,
-                    icon: const Icon(Icons.block, size: 18),
-                    label: const Text('Rechazar'),
-                  ),
-                ),
-              if (onReject != null && onApprove != null)
-                const SizedBox(width: 8),
-              if (onApprove != null)
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: onApprove,
-                    icon: const Icon(Icons.check, size: 18),
-                    label: const Text('Aprobar'),
-                  ),
-                ),
-            ],
-          ),
         ],
       ],
     );
@@ -614,164 +468,6 @@ class _StatusChip extends StatelessWidget {
       visualDensity: VisualDensity.compact,
     );
   }
-}
-
-class _RejectEntryDialog extends StatefulWidget {
-  const _RejectEntryDialog();
-
-  @override
-  State<_RejectEntryDialog> createState() => _RejectEntryDialogState();
-}
-
-class _RejectEntryDialogState extends State<_RejectEntryDialog> {
-  final TextEditingController _controller = TextEditingController();
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _submit() {
-    final value = _controller.text.trim();
-
-    if (value.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Ingresa el motivo del rechazo.')),
-      );
-      return;
-    }
-
-    Navigator.of(context).pop(value);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Motivo del rechazo'),
-      content: TextField(
-        controller: _controller,
-        decoration: const InputDecoration(labelText: 'Observacion'),
-        minLines: 2,
-        maxLines: 4,
-        autofocus: true,
-        textInputAction: TextInputAction.done,
-        onSubmitted: (_) => _submit(),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancelar'),
-        ),
-        FilledButton(
-          onPressed: _submit,
-          child: const Text('Rechazar'),
-        ),
-      ],
-    );
-  }
-}
-
-class _EditEntryDialog extends StatefulWidget {
-  const _EditEntryDialog({
-    required this.initialQuantity,
-    required this.initialNote,
-  });
-
-  final String initialQuantity;
-  final String initialNote;
-
-  @override
-  State<_EditEntryDialog> createState() => _EditEntryDialogState();
-}
-
-class _EditEntryDialogState extends State<_EditEntryDialog> {
-  late final TextEditingController _quantityController;
-  late final TextEditingController _noteController;
-
-  @override
-  void initState() {
-    super.initState();
-    _quantityController = TextEditingController(text: widget.initialQuantity);
-    _noteController = TextEditingController(text: widget.initialNote);
-  }
-
-  @override
-  void dispose() {
-    _quantityController.dispose();
-    _noteController.dispose();
-    super.dispose();
-  }
-
-  void _submit() {
-    final quantity = double.tryParse(
-      _quantityController.text.trim().replaceAll(',', '.'),
-    );
-
-    if (quantity == null || quantity <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Ingresa una cantidad u horas valida.')),
-      );
-      return;
-    }
-
-    Navigator.of(context).pop(
-      _EntryEditResult(
-        quantity: quantity,
-        note: _noteController.text.trim(),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Editar registro'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: _quantityController,
-              autofocus: true,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(labelText: 'Cantidad u horas'),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _noteController,
-              minLines: 2,
-              maxLines: 4,
-              decoration: const InputDecoration(labelText: 'Nota'),
-              textInputAction: TextInputAction.done,
-              onSubmitted: (_) => _submit(),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancelar'),
-        ),
-        FilledButton(
-          onPressed: _submit,
-          child: const Text('Guardar'),
-        ),
-      ],
-    );
-  }
-}
-
-class _EntryEditResult {
-  const _EntryEditResult({
-    required this.quantity,
-    required this.note,
-  });
-
-  final double quantity;
-  final String note;
 }
 
 int _compareEmployeeCode(String a, String b) {

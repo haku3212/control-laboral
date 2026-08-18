@@ -257,9 +257,8 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
           builder: (context) => AlertDialog(
             title: const Text('Eliminar trabajador'),
             content: Text(
-              'Se eliminara permanentemente a ${employee.fullName}. '
-              'Si tiene registros antiguos, la base puede bloquearlo para '
-              'no perder historial.',
+              'Se quitara a ${employee.fullName} del panel de trabajadores. '
+              'Si tiene historial, sus registros antiguos se conservaran.',
             ),
             actions: [
               TextButton(
@@ -278,20 +277,25 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
     if (!confirmed) return;
 
     try {
-      await ref.read(employeesRepositoryProvider).delete(employee.id);
+      final result =
+          await ref.read(employeesRepositoryProvider).delete(employee.id);
       ref.invalidate(employeesProvider);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Trabajador eliminado.')),
+          SnackBar(
+            content: Text(
+              result == EmployeeDeleteResult.deleted
+                  ? 'Trabajador eliminado.'
+                  : 'Trabajador ocultado. Su historial se conserva.',
+            ),
+          ),
         );
       }
     } catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            'No se pudo eliminar. Si tiene historial, desactivalo: $error',
-          ),
+          content: Text('No se pudo eliminar el trabajador: $error'),
         ),
       );
     }

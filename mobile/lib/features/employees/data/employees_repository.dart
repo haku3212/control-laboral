@@ -33,6 +33,7 @@ class EmployeesRepository {
         .from('employees')
         .select()
         .eq('empresa_id', empresaId)
+        .isFilter('deleted_at', null)
         .order('active', ascending: false)
         .order('code')
         .order('full_name');
@@ -133,8 +134,10 @@ class EmployeesRepository {
     }).eq('id', id);
   }
 
-  Future<void> delete(String id) async {
+  Future<EmployeeDeleteResult> delete(String id) async {
     final empresaId = await _empresaId();
+    final hasHistory = await _hasWorkEntries(empresaId: empresaId, id: id);
+
     await _client
         .from('employee_work_types')
         .delete()
@@ -145,10 +148,39 @@ class EmployeesRepository {
         .delete()
         .eq('empresa_id', empresaId)
         .eq('employee_id', id);
+
+    if (hasHistory) {
+      await _client
+          .from('employees')
+          .update({
+            'active': false,
+            'deleted_at': DateTime.now().toIso8601String(),
+            'modificado_por': _client.auth.currentUser?.id,
+            'fecha_modificacion': DateTime.now().toIso8601String(),
+          })
+          .eq('empresa_id', empresaId)
+          .eq('id', id);
+      return EmployeeDeleteResult.hiddenWithHistory;
+    }
+
     await _client.from('employees').delete().eq('empresa_id', empresaId).eq(
           'id',
           id,
         );
+    return EmployeeDeleteResult.deleted;
+  }
+
+  Future<bool> _hasWorkEntries({
+    required String empresaId,
+    required String id,
+  }) async {
+    final rows = await _client
+        .from('work_entries')
+        .select('id')
+        .eq('empresa_id', empresaId)
+        .eq('employee_id', id)
+        .limit(1);
+    return rows.isNotEmpty;
   }
 
   Future<Set<String>> allowedWorkTypeIds(String employeeId) async {
@@ -251,4 +283,9 @@ class EmployeesRepository {
     if (codeCompare != 0) return codeCompare;
     return a.fullName.compareTo(b.fullName);
   }
+}
+
+enum EmployeeDeleteResult {
+  deleted,
+  hiddenWithHistory,
 }
