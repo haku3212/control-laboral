@@ -25,7 +25,8 @@ class PayrollScreen extends ConsumerWidget {
             child: Padding(
               padding: EdgeInsets.all(24),
               child: Text(
-                'No hay pagos pendientes por cancelar.',
+                'No hay pagos pendientes por cancelar en la semana actual. '
+                'Verifica que los registros esten confirmados y dentro de esta semana.',
                 textAlign: TextAlign.center,
               ),
             ),
