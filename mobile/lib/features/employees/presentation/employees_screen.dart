@@ -607,6 +607,9 @@ class _EmployeeFormState extends ConsumerState<_EmployeeForm> {
         _allowedWorkTypeIds
           ..clear()
           ..addAll(ids);
+        if (ids.isNotEmpty) {
+          _restrictWorkTypes = true;
+        }
       });
     } finally {
       if (mounted) setState(() => _loadingPermissions = false);
@@ -615,6 +618,17 @@ class _EmployeeFormState extends ConsumerState<_EmployeeForm> {
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_restrictWorkTypes && _allowedWorkTypeIds.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Marca al menos un trabajo permitido.'),
+        ),
+      );
+      return;
+    }
+
+    final restrictWorkTypes =
+        _restrictWorkTypes || _allowedWorkTypeIds.isNotEmpty;
 
     setState(() => _saving = true);
 
@@ -628,11 +642,11 @@ class _EmployeeFormState extends ConsumerState<_EmployeeForm> {
             jobTitle: _jobTitle.text,
             notes: _notes.text,
             active: _active,
-            restrictWorkTypes: _restrictWorkTypes,
+            restrictWorkTypes: restrictWorkTypes,
           );
       await ref.read(employeesRepositoryProvider).saveWorkTypePermissions(
             employeeId: employeeId,
-            restrictWorkTypes: _restrictWorkTypes,
+            restrictWorkTypes: restrictWorkTypes,
             workTypeIds: _allowedWorkTypeIds,
           );
 

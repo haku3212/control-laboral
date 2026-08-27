@@ -127,6 +127,7 @@ class _OperatorNewEntryScreenState
                         noteController: _noteController(selectedEmployee.id),
                         startTime: _startTimes[selectedEmployee.id],
                         endTime: _endTimes[selectedEmployee.id],
+                        workedHours: _netWorkedHours(selectedEmployee.id),
                         restMinutes: _automaticRestMinutes(selectedEmployee.id),
                         onPickStart: () =>
                             _pickTime(selectedEmployee.id, isStart: true),
@@ -183,8 +184,10 @@ class _OperatorNewEntryScreenState
     List<WorkType> activeWorkTypes,
     Map<String, Set<String>> permissionMap,
   ) {
-    if (!employee.restrictWorkTypes) return activeWorkTypes;
     final allowedIds = permissionMap[employee.id] ?? <String>{};
+    if (!employee.restrictWorkTypes && allowedIds.isEmpty) {
+      return activeWorkTypes;
+    }
     return activeWorkTypes
         .where((item) => allowedIds.contains(item.id))
         .toList();
@@ -302,9 +305,8 @@ class _OperatorNewEntryScreenState
     }
 
     final grossHours = _grossWorkedHours(employee.id);
-    final automaticCommonHours = drafts.isEmpty && manualCommonHours == null
-        ? _netWorkedHours(employee.id)
-        : null;
+    final automaticCommonHours =
+        manualCommonHours == null ? _netWorkedHours(employee.id) : null;
     final commonHours = manualCommonHours ?? automaticCommonHours;
     if (commonHours != null && commonHours > 0) {
       if (commonHourType == null) {
@@ -556,6 +558,7 @@ class _EmployeeSheetSection extends StatelessWidget {
     required this.noteController,
     required this.startTime,
     required this.endTime,
+    required this.workedHours,
     required this.restMinutes,
     required this.onPickStart,
     required this.onPickEnd,
@@ -570,6 +573,7 @@ class _EmployeeSheetSection extends StatelessWidget {
   final TextEditingController noteController;
   final TimeOfDay? startTime;
   final TimeOfDay? endTime;
+  final double? workedHours;
   final int restMinutes;
   final VoidCallback onPickStart;
   final VoidCallback onPickEnd;
@@ -696,6 +700,33 @@ class _EmployeeSheetSection extends StatelessWidget {
                 ),
               ],
             ),
+            if (workedHours != null) ...[
+              const SizedBox(height: 10),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: colorScheme.primaryContainer.withValues(alpha: 0.72),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: colorScheme.primaryContainer),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.schedule_outlined),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Horas trabajadas: ${_formatHours(workedHours!)}',
+                        style: TextStyle(
+                          color: colorScheme.onPrimaryContainer,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             if (restMinutes > 0) ...[
               const SizedBox(height: 10),
               Container(
@@ -744,6 +775,14 @@ class _EmployeeSheetSection extends StatelessWidget {
     if (parts.isEmpty || parts.first.isEmpty) return '?';
     if (parts.length == 1) return parts.first[0].toUpperCase();
     return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
+  }
+
+  String _formatHours(double hours) {
+    final totalMinutes = (hours * 60).round();
+    final wholeHours = totalMinutes ~/ 60;
+    final minutes = totalMinutes % 60;
+    if (minutes == 0) return '$wholeHours h';
+    return '$wholeHours h $minutes min';
   }
 }
 
