@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../shared/widgets/async_value_view.dart';
+import '../../../shared/utils/app_data_refresh.dart';
 import '../../rates/data/rates_repository.dart';
 import '../data/payroll_repository.dart';
 import '../data/payroll_summary.dart';
@@ -41,7 +42,7 @@ class PayrollScreen extends ConsumerWidget {
             pendingItems.where((item) => item.hasMissingRates).length;
 
         return RefreshIndicator(
-          onRefresh: () async => ref.invalidate(payrollSummariesProvider),
+          onRefresh: () async => refreshPayrollData(ref),
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
             children: [
@@ -79,7 +80,7 @@ class PayrollScreen extends ConsumerWidget {
                     await ref
                         .read(payrollRepositoryProvider)
                         .closeCurrentWeek();
-                    ref.invalidate(payrollSummariesProvider);
+                    refreshPayrollData(ref);
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
@@ -221,7 +222,7 @@ class _EmployeePayrollCard extends ConsumerWidget {
                         await ref
                             .read(payrollRepositoryProvider)
                             .setPaid(summary.employeeId, false);
-                        ref.invalidate(payrollSummariesProvider);
+                        refreshPayrollData(ref);
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
@@ -314,7 +315,7 @@ class _EmployeePayrollCard extends ConsumerWidget {
                             await ref
                                 .read(payrollRepositoryProvider)
                                 .deleteAdjustment(adjustment.id);
-                            ref.invalidate(payrollSummariesProvider);
+                            refreshPayrollData(ref);
                             if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
@@ -370,7 +371,7 @@ class _EmployeePayrollCard extends ConsumerWidget {
                         await ref
                             .read(payrollRepositoryProvider)
                             .setPaid(summary.employeeId, false);
-                        ref.invalidate(payrollSummariesProvider);
+                        refreshPayrollData(ref);
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
@@ -413,7 +414,7 @@ class _EmployeePayrollCard extends ConsumerWidget {
                               await ref
                                   .read(payrollRepositoryProvider)
                                   .setPaid(summary.employeeId, true);
-                              ref.invalidate(payrollSummariesProvider);
+                              refreshPayrollData(ref);
                               if (context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
@@ -473,7 +474,7 @@ class _EmployeePayrollCard extends ConsumerWidget {
             concept: result.concept,
             amount: result.amount,
           );
-      ref.invalidate(payrollSummariesProvider);
+      refreshPayrollData(ref);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Ajuste agregado correctamente.')),
@@ -627,7 +628,7 @@ class _PayrollLineTile extends ConsumerWidget {
             validUntil: null,
             active: true,
           );
-      ref.invalidate(payrollSummariesProvider);
+      refreshRateData(ref);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Precio asignado correctamente.')),

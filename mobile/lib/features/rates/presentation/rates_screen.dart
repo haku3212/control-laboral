@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../../../shared/widgets/async_value_view.dart';
 import '../../../shared/widgets/empty_state.dart';
+import '../../../shared/utils/app_data_refresh.dart';
 import '../../employees/data/employee.dart';
 import '../../employees/data/employees_repository.dart';
 import '../../work_types/data/work_type.dart';
@@ -34,7 +35,7 @@ class RatesScreen extends ConsumerWidget {
 
           return RefreshIndicator(
             onRefresh: () async {
-              ref.invalidate(ratesProvider);
+              refreshRateData(ref);
               await ref.read(ratesProvider.future);
             },
             child: ListView.separated(
@@ -88,7 +89,7 @@ class RatesScreen extends ConsumerWidget {
     );
 
     if (saved == true) {
-      ref.invalidate(ratesProvider);
+      refreshRateData(ref);
     }
   }
 }
@@ -365,6 +366,7 @@ class _RateFormState extends ConsumerState<_RateForm> {
             validUntil: _validUntil,
             active: _active,
           );
+      refreshRateData(ref);
 
       if (!mounted) return;
 

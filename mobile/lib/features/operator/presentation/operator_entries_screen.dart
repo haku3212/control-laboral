@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../../../shared/widgets/async_value_view.dart';
 import '../../../shared/widgets/empty_state.dart';
+import '../../../shared/utils/app_data_refresh.dart';
 import '../data/operator_entry.dart';
 import '../data/operator_entries_repository.dart';
 
@@ -29,8 +30,7 @@ class _OperatorEntriesScreenState extends ConsumerState<OperatorEntriesScreen> {
         final groups = _groupEntries(items);
 
         return RefreshIndicator(
-          onRefresh: () async =>
-              ref.invalidate(operatorEntriesByDateProvider(_selectedDate)),
+          onRefresh: () async => refreshEntryData(ref, date: _selectedDate),
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
             children: [

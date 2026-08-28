@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/auth/profile_provider.dart';
+import '../utils/app_data_refresh.dart';
 
 class AppShell extends ConsumerWidget {
   const AppShell({required this.child, super.key});
@@ -85,7 +86,11 @@ class AppShell extends ConsumerWidget {
       body: SafeArea(child: child),
       bottomNavigationBar: NavigationBar(
         selectedIndex: currentIndex < 0 ? 0 : currentIndex,
-        onDestinationSelected: (index) => context.go(destinations[index].path),
+        onDestinationSelected: (index) {
+          final path = destinations[index].path;
+          refreshForRoute(ref, path);
+          context.go(path);
+        },
         destinations: [
           for (final item in destinations)
             NavigationDestination(

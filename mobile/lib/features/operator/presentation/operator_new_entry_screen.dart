@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/auth/profile_provider.dart';
+import '../../../shared/utils/app_data_refresh.dart';
 import '../../employees/data/employee.dart';
 import '../../employees/data/employees_repository.dart';
 import '../../work_types/data/work_type.dart';
@@ -344,7 +345,7 @@ class _OperatorNewEntryScreenState
     setState(() => _saving = true);
     try {
       await ref.read(operatorEntriesRepositoryProvider).createMany(drafts);
-      ref.invalidate(operatorEntriesProvider);
+      refreshEntryData(ref, date: _workDate);
       if (!mounted) return;
       _clearAll();
       ScaffoldMessenger.of(context).showSnackBar(

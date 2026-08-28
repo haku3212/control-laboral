@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../shared/widgets/async_value_view.dart';
 import '../../../shared/widgets/empty_state.dart';
+import '../../../shared/utils/app_data_refresh.dart';
 import '../data/work_type.dart';
 import '../data/work_types_repository.dart';
 
@@ -50,7 +51,7 @@ class WorkTypesScreen extends ConsumerWidget {
             );
           }
           return RefreshIndicator(
-            onRefresh: () async => ref.invalidate(workTypesProvider),
+            onRefresh: () async => refreshWorkTypeData(ref),
             child: ListView.separated(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
               itemCount: items.length,
@@ -107,7 +108,7 @@ class WorkTypesScreen extends ConsumerWidget {
       useSafeArea: true,
       builder: (_) => _WorkTypeForm(item: item),
     );
-    ref.invalidate(workTypesProvider);
+    refreshWorkTypeData(ref);
   }
 }
 
@@ -297,6 +298,7 @@ class _WorkTypeFormState extends ConsumerState<_WorkTypeForm> {
             category: _category,
             active: _active,
           );
+      refreshWorkTypeData(ref);
       if (mounted) Navigator.of(context).pop();
     } catch (error) {
       if (!mounted) return;

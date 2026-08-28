@@ -4,7 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../../../shared/widgets/async_value_view.dart';
 import '../../../shared/widgets/empty_state.dart';
-import '../../payroll/data/payroll_repository.dart';
+import '../../../shared/utils/app_data_refresh.dart';
 import '../data/work_entry.dart';
 import '../data/work_entries_repository.dart';
 
@@ -30,7 +30,7 @@ class _EntriesScreenState extends ConsumerState<EntriesScreen> {
 
         return RefreshIndicator(
           onRefresh: () async {
-            ref.invalidate(workEntriesByDateProvider(_selectedDate));
+            refreshEntryData(ref, date: _selectedDate);
             await ref.read(workEntriesByDateProvider(_selectedDate).future);
           },
           child: ListView(
@@ -125,8 +125,7 @@ class _EntriesScreenState extends ConsumerState<EntriesScreen> {
     if (ids.isEmpty) return;
     try {
       await ref.read(workEntriesRepositoryProvider).updateStatuses(ids, status);
-      ref.invalidate(workEntriesByDateProvider(_selectedDate));
-      ref.invalidate(payrollSummariesProvider);
+      refreshEntryData(ref, date: _selectedDate);
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

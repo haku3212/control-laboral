@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../shared/widgets/async_value_view.dart';
 import '../../../shared/widgets/empty_state.dart';
+import '../../../shared/utils/app_data_refresh.dart';
 import '../../work_types/data/work_type.dart';
 import '../../work_types/data/work_types_repository.dart';
 import '../data/employee.dart';
@@ -62,7 +63,7 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
 
                 return RefreshIndicator(
                   onRefresh: () async {
-                    ref.invalidate(employeesProvider);
+                    refreshEmployeeData(ref);
                   },
                   child: ListView.separated(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
@@ -158,7 +159,7 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
                                             .read(employeesRepositoryProvider)
                                             .setActive(employee.id, value);
 
-                                        ref.invalidate(employeesProvider);
+                                        refreshEmployeeData(ref);
                                       },
                                     ),
                                     IconButton(
@@ -218,7 +219,7 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
       builder: (_) => _EmployeeForm(employee: employee),
     );
 
-    ref.invalidate(employeesProvider);
+    refreshEmployeeData(ref);
   }
 
   Future<bool> _confirmDeactivate(
@@ -279,7 +280,7 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
     try {
       final result =
           await ref.read(employeesRepositoryProvider).delete(employee.id);
-      ref.invalidate(employeesProvider);
+      refreshEmployeeData(ref);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -649,6 +650,7 @@ class _EmployeeFormState extends ConsumerState<_EmployeeForm> {
             restrictWorkTypes: restrictWorkTypes,
             workTypeIds: _allowedWorkTypeIds,
           );
+      refreshEmployeeData(ref);
 
       if (mounted) {
         Navigator.of(context).pop();
