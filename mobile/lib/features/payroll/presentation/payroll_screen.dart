@@ -8,13 +8,49 @@ import '../../rates/data/rates_repository.dart';
 import '../data/payroll_repository.dart';
 import '../data/payroll_summary.dart';
 
-class PayrollScreen extends ConsumerWidget {
+class PayrollScreen extends ConsumerStatefulWidget {
   const PayrollScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final summaries = ref.watch(payrollSummariesProvider);
+  ConsumerState<PayrollScreen> createState() => _PayrollScreenState();
+}
+
+class _PayrollScreenState extends ConsumerState<PayrollScreen> {
+  late DateTime _weekStart;
+
+  DateTime get _weekEnd => _weekStart.add(const Duration(days: 6));
+
+  @override
+  void initState() {
+    super.initState();
+    _weekStart = _startOfWeek(DateTime.now());
+  }
+
+  DateTime _startOfWeek(DateTime date) {
+    final normalized = DateTime(date.year, date.month, date.day);
+    return normalized.subtract(Duration(days: normalized.weekday - 1));
+  }
+
+  void _moveWeek(int weeks) {
+    setState(() {
+      _weekStart = _weekStart.add(Duration(days: weeks * 7));
+    });
+  }
+
+  void _goToCurrentWeek() {
+    setState(() => _weekStart = _startOfWeek(DateTime.now()));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final summaries = ref.watch(
+      payrollSummariesByRangeProvider(
+        (startDate: _weekStart, endDate: _weekEnd),
+      ),
+    );
     final money = NumberFormat.currency(locale: 'es_BO', symbol: 'Bs ');
+    final day = DateFormat('dd/MM/yyyy');
+    final rangeText = '${day.format(_weekStart)} - ${day.format(_weekEnd)}';
 
     return AsyncValueView(
       value: summaries,
@@ -22,14 +58,26 @@ class PayrollScreen extends ConsumerWidget {
         final pendingItems = items.where((item) => !item.isPaid).toList();
 
         if (pendingItems.isEmpty) {
-          return const Center(
-            child: Padding(
-              padding: EdgeInsets.all(24),
-              child: Text(
-                'No hay pagos pendientes por cancelar en la semana actual. '
-                'Verifica que los registros esten confirmados y dentro de esta semana.',
-                textAlign: TextAlign.center,
-              ),
+          return RefreshIndicator(
+            onRefresh: () async => refreshPayrollData(ref),
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+              children: [
+                _WeekSelector(
+                  rangeText: rangeText,
+                  onPrevious: () => _moveWeek(-1),
+                  onNext: () => _moveWeek(1),
+                  onCurrent: _goToCurrentWeek,
+                ),
+                const SizedBox(height: 24),
+                const Center(
+                  child: Text(
+                    'No hay pagos pendientes por cancelar en esta semana. '
+                    'Verifica que los registros esten confirmados.',
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ],
             ),
           );
         }
@@ -46,6 +94,13 @@ class PayrollScreen extends ConsumerWidget {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
             children: [
+              _WeekSelector(
+                rangeText: rangeText,
+                onPrevious: () => _moveWeek(-1),
+                onNext: () => _moveWeek(1),
+                onCurrent: _goToCurrentWeek,
+              ),
+              const SizedBox(height: 16),
               Text(
                 'Pagos pendientes',
                 style: Theme.of(context).textTheme.titleLarge,
@@ -79,7 +134,7 @@ class PayrollScreen extends ConsumerWidget {
                   try {
                     await ref
                         .read(payrollRepositoryProvider)
-                        .closeCurrentWeek();
+                        .closeWeek(startDate: _weekStart, endDate: _weekEnd);
                     refreshPayrollData(ref);
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
@@ -110,6 +165,73 @@ class PayrollScreen extends ConsumerWidget {
           ),
         );
       },
+    );
+  }
+}
+
+class _WeekSelector extends StatelessWidget {
+  const _WeekSelector({
+    required this.rangeText,
+    required this.onPrevious,
+    required this.onNext,
+    required this.onCurrent,
+  });
+
+  final String rangeText;
+  final VoidCallback onPrevious;
+  final VoidCallback onNext;
+  final VoidCallback onCurrent;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Semana de pago',
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                IconButton(
+                  tooltip: 'Semana anterior',
+                  onPressed: onPrevious,
+                  icon: const Icon(Icons.chevron_left),
+                ),
+                Expanded(
+                  child: Center(
+                    child: Text(
+                      rangeText,
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Semana siguiente',
+                  onPressed: onNext,
+                  icon: const Icon(Icons.chevron_right),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: onCurrent,
+              icon: const Icon(Icons.today_outlined),
+              label: const Text('Ir a esta semana'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

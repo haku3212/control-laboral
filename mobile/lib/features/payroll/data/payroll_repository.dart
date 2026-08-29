@@ -162,6 +162,25 @@ class PayrollRepository {
 
   Future<void> closeCurrentWeek() async {
     final period = await _currentPeriod();
+    await _closePeriod(period['id'] as String);
+  }
+
+  Future<void> closeWeek({
+    required DateTime startDate,
+    required DateTime endDate,
+  }) async {
+    final empresaId = await _empresaId();
+    final period = await _client
+        .from('weekly_periods')
+        .select()
+        .eq('empresa_id', empresaId)
+        .eq('start_date', _dateFormat.format(startDate))
+        .eq('end_date', _dateFormat.format(endDate))
+        .single();
+    await _closePeriod(period['id'] as String);
+  }
+
+  Future<void> _closePeriod(String periodId) async {
     final userId = _client.auth.currentUser?.id;
     await _client.from('weekly_periods').update({
       'status': 'closed',
@@ -169,7 +188,7 @@ class PayrollRepository {
       'closed_at': DateTime.now().toIso8601String(),
       'modificado_por': userId,
       'fecha_modificacion': DateTime.now().toIso8601String(),
-    }).eq('id', period['id']);
+    }).eq('id', periodId);
   }
 
   Future<Map<String, dynamic>> _ensurePayroll(String employeeId) async {
