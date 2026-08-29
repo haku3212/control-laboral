@@ -403,11 +403,11 @@ class _EmployeePayrollCard extends ConsumerWidget {
                   : 'Precios completos',
             ),
             const Divider(height: 22),
-            for (final line in summary.groupedLines)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: _PayrollLineTile(line: line, money: money),
-              ),
+            for (final dayGroup in summary.dayGroups) ...[
+              _PayrollDayBlock(dayGroup: dayGroup, money: money),
+              if (dayGroup != summary.dayGroups.last)
+                const Divider(height: 18),
+            ],
             const Divider(height: 22),
             Text(
               'Bonos, anticipos y descuentos',
@@ -636,13 +636,78 @@ class _EmployeePayrollCard extends ConsumerWidget {
   }
 }
 
+class _PayrollDayBlock extends StatelessWidget {
+  const _PayrollDayBlock({
+    required this.dayGroup,
+    required this.money,
+  });
+
+  final PayrollDayGroup dayGroup;
+  final NumberFormat money;
+
+  @override
+  Widget build(BuildContext context) {
+    final dateFormat = DateFormat('dd/MM/yyyy', 'es_BO');
+    final colorScheme = Theme.of(context).colorScheme;
+    final title = '${_weekdayLabel(dayGroup.date)} '
+        '${dateFormat.format(dayGroup.date)}';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                title,
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+              ),
+            ),
+            Text(
+              dayGroup.hasMissingRates
+                  ? 'Revisar precio'
+                  : money.format(dayGroup.total),
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: dayGroup.hasMissingRates
+                        ? colorScheme.error
+                        : colorScheme.onSurface,
+                    fontWeight: FontWeight.w800,
+                  ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        for (final line in dayGroup.lines) ...[
+          _PayrollLineTile(line: line, money: money),
+          if (line != dayGroup.lines.last) const SizedBox(height: 8),
+        ],
+      ],
+    );
+  }
+
+  String _weekdayLabel(DateTime date) {
+    return switch (date.weekday) {
+      DateTime.monday => 'Lunes',
+      DateTime.tuesday => 'Martes',
+      DateTime.wednesday => 'Miercoles',
+      DateTime.thursday => 'Jueves',
+      DateTime.friday => 'Viernes',
+      DateTime.saturday => 'Sabado',
+      DateTime.sunday => 'Domingo',
+      _ => '',
+    };
+  }
+}
+
 class _PayrollLineTile extends ConsumerWidget {
   const _PayrollLineTile({
     required this.line,
     required this.money,
   });
 
-  final PayrollLineTotal line;
+  final PayrollLine line;
   final NumberFormat money;
 
   @override
@@ -744,9 +809,9 @@ class _PayrollLineTile extends ConsumerWidget {
     try {
       await ref.read(ratesRepositoryProvider).save(
             workTypeId: line.workTypeId,
-            employeeId: null,
+            employeeId: line.employeeId,
             unitPrice: value,
-            validFrom: DateTime.now(),
+            validFrom: line.workDate,
             validUntil: null,
             active: true,
           );

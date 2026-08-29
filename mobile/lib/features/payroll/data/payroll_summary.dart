@@ -65,6 +65,25 @@ class EmployeePayrollSummary {
       ..sort((a, b) => a.workTypeName.compareTo(b.workTypeName));
   }
 
+  List<PayrollDayGroup> get dayGroups {
+    final grouped = <DateTime, List<PayrollLine>>{};
+    for (final line in lines) {
+      final day = DateTime(
+        line.workDate.year,
+        line.workDate.month,
+        line.workDate.day,
+      );
+      grouped.putIfAbsent(day, () => <PayrollLine>[]).add(line);
+    }
+
+    final groups = [
+      for (final entry in grouped.entries)
+        PayrollDayGroup(date: entry.key, lines: entry.value),
+    ];
+    groups.sort((a, b) => a.date.compareTo(b.date));
+    return groups;
+  }
+
   double get totalPayable {
     final value = grossPayable + adjustmentSignedTotal;
     return value < 0 ? 0 : value;
@@ -81,6 +100,19 @@ class EmployeePayrollSummary {
 
   bool get hasMissingRates => lines.any((line) => !line.hasRate);
   bool get isPaid => status == 'paid';
+}
+
+class PayrollDayGroup {
+  const PayrollDayGroup({
+    required this.date,
+    required this.lines,
+  });
+
+  final DateTime date;
+  final List<PayrollLine> lines;
+
+  double get total => lines.fold(0, (sum, line) => sum + (line.subtotal ?? 0));
+  bool get hasMissingRates => lines.any((line) => !line.hasRate);
 }
 
 class PayrollLineTotal {
