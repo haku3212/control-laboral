@@ -16,12 +16,26 @@ class EntriesScreen extends ConsumerStatefulWidget {
 }
 
 class _EntriesScreenState extends ConsumerState<EntriesScreen> {
-  DateTime _selectedDate = DateTime.now();
+  late DateTime _weekStart;
+
+  DateTime get _weekEnd => _weekStart.add(const Duration(days: 6));
+
+  @override
+  void initState() {
+    super.initState();
+    _weekStart = _startOfWeek(DateTime.now());
+  }
 
   @override
   Widget build(BuildContext context) {
-    final entries = ref.watch(workEntriesByDateProvider(_selectedDate));
     final dateFormat = DateFormat('dd/MM/yyyy', 'es_BO');
+    final entries = ref.watch(
+      workEntriesByRangeProvider(
+        (startDate: _weekStart, endDate: _weekEnd),
+      ),
+    );
+    final rangeText =
+        '${dateFormat.format(_weekStart)} - ${dateFormat.format(_weekEnd)}';
 
     return AsyncValueView(
       value: entries,
@@ -30,25 +44,29 @@ class _EntriesScreenState extends ConsumerState<EntriesScreen> {
 
         return RefreshIndicator(
           onRefresh: () async {
-            refreshEntryData(ref, date: _selectedDate);
-            await ref.read(workEntriesByDateProvider(_selectedDate).future);
+            refreshEntryData(ref);
+            await ref.read(
+              workEntriesByRangeProvider(
+                (startDate: _weekStart, endDate: _weekEnd),
+              ).future,
+            );
           },
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
             children: [
-              _DateHeader(
-                date: dateFormat.format(_selectedDate),
-                onPrevious: () => _moveDate(-1),
-                onNext: () => _moveDate(1),
-                onPick: _pickDate,
-                onToday: _setToday,
+              _WeekHeader(
+                rangeText: rangeText,
+                onPrevious: () => _moveWeek(-1),
+                onNext: () => _moveWeek(1),
+                onPick: _pickWeek,
+                onCurrent: _setCurrentWeek,
               ),
               const SizedBox(height: 12),
               if (items.isEmpty)
                 const EmptyState(
                   icon: Icons.assignment_outlined,
                   title: 'Sin registros',
-                  message: 'No hay registros para la fecha seleccionada.',
+                  message: 'No hay registros para la semana seleccionada.',
                 )
               else
                 for (final group in groups) ...[
@@ -91,29 +109,30 @@ class _EntriesScreenState extends ConsumerState<EntriesScreen> {
     return groups;
   }
 
-  void _moveDate(int days) {
+  DateTime _startOfWeek(DateTime date) {
+    final normalized = DateTime(date.year, date.month, date.day);
+    return normalized.subtract(Duration(days: normalized.weekday - 1));
+  }
+
+  void _moveWeek(int weeks) {
     setState(() {
-      _selectedDate = DateTime(
-        _selectedDate.year,
-        _selectedDate.month,
-        _selectedDate.day + days,
-      );
+      _weekStart = _weekStart.add(Duration(days: weeks * 7));
     });
   }
 
-  void _setToday() {
-    setState(() => _selectedDate = DateTime.now());
+  void _setCurrentWeek() {
+    setState(() => _weekStart = _startOfWeek(DateTime.now()));
   }
 
-  Future<void> _pickDate() async {
+  Future<void> _pickWeek() async {
     final picked = await showDatePicker(
       context: context,
       firstDate: DateTime(2020),
       lastDate: DateTime.now().add(const Duration(days: 365)),
-      initialDate: _selectedDate,
+      initialDate: _weekStart,
     );
     if (picked == null) return;
-    setState(() => _selectedDate = picked);
+    setState(() => _weekStart = _startOfWeek(picked));
   }
 
   Future<void> _setGroupStatus(
@@ -125,7 +144,7 @@ class _EntriesScreenState extends ConsumerState<EntriesScreen> {
     if (ids.isEmpty) return;
     try {
       await ref.read(workEntriesRepositoryProvider).updateStatuses(ids, status);
-      refreshEntryData(ref, date: _selectedDate);
+      refreshEntryData(ref);
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -148,20 +167,20 @@ class _EntriesScreenState extends ConsumerState<EntriesScreen> {
   }
 }
 
-class _DateHeader extends StatelessWidget {
-  const _DateHeader({
-    required this.date,
+class _WeekHeader extends StatelessWidget {
+  const _WeekHeader({
+    required this.rangeText,
     required this.onPrevious,
     required this.onNext,
     required this.onPick,
-    required this.onToday,
+    required this.onCurrent,
   });
 
-  final String date;
+  final String rangeText;
   final VoidCallback onPrevious;
   final VoidCallback onNext;
   final VoidCallback onPick;
-  final VoidCallback onToday;
+  final VoidCallback onCurrent;
 
   @override
   Widget build(BuildContext context) {
@@ -182,7 +201,7 @@ class _DateHeader extends StatelessWidget {
                   child: OutlinedButton.icon(
                     onPressed: onPick,
                     icon: const Icon(Icons.event_outlined),
-                    label: Text(date),
+                    label: Text(rangeText),
                   ),
                 ),
                 IconButton(
@@ -194,9 +213,9 @@ class _DateHeader extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             TextButton.icon(
-              onPressed: onToday,
+              onPressed: onCurrent,
               icon: const Icon(Icons.today_outlined),
-              label: const Text('Ver hoy'),
+              label: const Text('Ver semana actual'),
             ),
           ],
         ),
@@ -219,6 +238,38 @@ class _EmployeeEntryGroupData {
   List<WorkEntry> get pendingItems => items
       .where((item) => item.status == 'draft' || item.status == 'pending')
       .toList();
+
+  List<_EmployeeDayGroup> get dayGroups {
+    final grouped = <String, List<WorkEntry>>{};
+    for (final item in items) {
+      final day = DateTime(
+        item.workDate.year,
+        item.workDate.month,
+        item.workDate.day,
+      );
+      grouped.putIfAbsent(day.toIso8601String(), () => []).add(item);
+    }
+
+    final groups = [
+      for (final entry in grouped.entries)
+        _EmployeeDayGroup(
+          date: DateTime.parse(entry.key),
+          items: entry.value,
+        ),
+    ];
+    groups.sort((a, b) => a.date.compareTo(b.date));
+    return groups;
+  }
+}
+
+class _EmployeeDayGroup {
+  const _EmployeeDayGroup({
+    required this.date,
+    required this.items,
+  });
+
+  final DateTime date;
+  final List<WorkEntry> items;
 }
 
 class _EmployeeEntriesGroup extends StatelessWidget {
@@ -293,14 +344,13 @@ class _EmployeeEntriesGroup extends StatelessWidget {
                 ),
               ),
             ],
-            const Divider(height: 22),
-            for (final item in group.items) ...[
-              _EntryLine(
-                item: item,
-                date: dateFormat.format(item.workDate),
-                quantity: _quantityText(item.quantity, item.unit),
+            for (final dayGroup in group.dayGroups) ...[
+              const Divider(height: 22),
+              _DayBlock(
+                dayGroup: dayGroup,
+                dateFormat: dateFormat,
+                formatQuantity: formatQuantity,
               ),
-              if (item != group.items.last) const Divider(height: 18),
             ],
           ],
         ),
@@ -313,6 +363,45 @@ class _EmployeeEntriesGroup extends StatelessWidget {
     if (parts.isEmpty || parts.first.isEmpty) return '?';
     if (parts.length == 1) return parts.first[0].toUpperCase();
     return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
+  }
+
+}
+
+class _DayBlock extends StatelessWidget {
+  const _DayBlock({
+    required this.dayGroup,
+    required this.dateFormat,
+    required this.formatQuantity,
+  });
+
+  final _EmployeeDayGroup dayGroup;
+  final DateFormat dateFormat;
+  final String Function(double value) formatQuantity;
+
+  @override
+  Widget build(BuildContext context) {
+    final title = '${_weekdayLabel(dayGroup.date)} '
+        '${dateFormat.format(dayGroup.date)}';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+        ),
+        const SizedBox(height: 10),
+        for (final item in dayGroup.items) ...[
+          _EntryLine(
+            item: item,
+            quantity: _quantityText(item.quantity, item.unit),
+          ),
+          if (item != dayGroup.items.last) const Divider(height: 18),
+        ],
+      ],
+    );
   }
 
   String _quantityText(double quantity, String unit) {
@@ -337,7 +426,21 @@ class _EmployeeEntriesGroup extends StatelessWidget {
       'bag' => 'bolsa',
       'bucket' => 'tacho',
       'tray' => 'bandeja',
+      'batch' => 'batch',
       _ => value,
+    };
+  }
+
+  String _weekdayLabel(DateTime date) {
+    return switch (date.weekday) {
+      DateTime.monday => 'Lunes',
+      DateTime.tuesday => 'Martes',
+      DateTime.wednesday => 'Miercoles',
+      DateTime.thursday => 'Jueves',
+      DateTime.friday => 'Viernes',
+      DateTime.saturday => 'Sabado',
+      DateTime.sunday => 'Domingo',
+      _ => '',
     };
   }
 }
@@ -345,12 +448,10 @@ class _EmployeeEntriesGroup extends StatelessWidget {
 class _EntryLine extends StatelessWidget {
   const _EntryLine({
     required this.item,
-    required this.date,
     required this.quantity,
   });
 
   final WorkEntry item;
-  final String date;
   final String quantity;
 
   @override
@@ -377,7 +478,6 @@ class _EntryLine extends StatelessWidget {
           spacing: 8,
           runSpacing: 8,
           children: [
-            _InfoPill(icon: Icons.calendar_today_outlined, text: date),
             _InfoPill(
               icon: Icons.numbers,
               text: quantity,

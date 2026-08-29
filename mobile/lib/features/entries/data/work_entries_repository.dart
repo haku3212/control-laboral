@@ -17,12 +17,24 @@ final workEntriesByDateProvider =
   return ref.watch(workEntriesRepositoryProvider).list(workDate: date);
 });
 
+final workEntriesByRangeProvider = FutureProvider.family<
+    List<WorkEntry>, ({DateTime startDate, DateTime endDate})>((ref, range) {
+  return ref.watch(workEntriesRepositoryProvider).list(
+        startDate: range.startDate,
+        endDate: range.endDate,
+      );
+});
+
 class WorkEntriesRepository {
   WorkEntriesRepository(this._client);
 
   final SupabaseClient _client;
 
-  Future<List<WorkEntry>> list({DateTime? workDate}) async {
+  Future<List<WorkEntry>> list({
+    DateTime? workDate,
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
     final empresaId = await _empresaId();
     var query = _client
         .from('work_entries')
@@ -33,6 +45,13 @@ class WorkEntriesRepository {
     if (workDate != null) {
       final dateText = _dateText(workDate);
       query = query.eq('work_date', dateText);
+    } else {
+      if (startDate != null) {
+        query = query.gte('work_date', _dateText(startDate));
+      }
+      if (endDate != null) {
+        query = query.lte('work_date', _dateText(endDate));
+      }
     }
 
     final rows = await query.order('work_date', ascending: false).limit(100);
