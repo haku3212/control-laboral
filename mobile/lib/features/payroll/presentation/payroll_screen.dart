@@ -17,6 +17,8 @@ class PayrollScreen extends ConsumerStatefulWidget {
 
 class _PayrollScreenState extends ConsumerState<PayrollScreen> {
   late DateTime _weekStart;
+  final TextEditingController _searchController = TextEditingController();
+  _PayrollFilter _filter = _PayrollFilter.pending;
 
   DateTime get _weekEnd => _weekStart.add(const Duration(days: 6));
 
@@ -42,6 +44,32 @@ class _PayrollScreenState extends ConsumerState<PayrollScreen> {
   }
 
   @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  List<EmployeePayrollSummary> _visibleItems(
+      List<EmployeePayrollSummary> items) {
+    final query = _searchController.text.trim().toLowerCase();
+
+    return items.where((item) {
+      final matchesQuery = query.isEmpty ||
+          item.employeeName.toLowerCase().contains(query) ||
+          item.employeeCode.toLowerCase().contains(query);
+      if (!matchesQuery) return false;
+
+      return switch (_filter) {
+        _PayrollFilter.all => true,
+        _PayrollFilter.pending => !item.isPaid,
+        _PayrollFilter.ready => !item.isPaid && !item.hasMissingRates,
+        _PayrollFilter.missingRates => !item.isPaid && item.hasMissingRates,
+        _PayrollFilter.paid => item.isPaid,
+      };
+    }).toList();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final summaries = ref.watch(
       payrollSummariesByRangeProvider(
@@ -55,9 +83,10 @@ class _PayrollScreenState extends ConsumerState<PayrollScreen> {
     return AsyncValueView(
       value: summaries,
       data: (items) {
+        final visibleItems = _visibleItems(items);
         final pendingItems = items.where((item) => !item.isPaid).toList();
 
-        if (pendingItems.isEmpty) {
+        if (items.isEmpty) {
           return RefreshIndicator(
             onRefresh: () async => refreshPayrollData(ref),
             child: ListView(
@@ -72,7 +101,7 @@ class _PayrollScreenState extends ConsumerState<PayrollScreen> {
                 const SizedBox(height: 24),
                 const Center(
                   child: Text(
-                    'No hay pagos pendientes por cancelar en esta semana. '
+                    'No hay pagos cargados en esta semana. '
                     'Verifica que los registros esten confirmados.',
                     textAlign: TextAlign.center,
                   ),
@@ -88,6 +117,9 @@ class _PayrollScreenState extends ConsumerState<PayrollScreen> {
             pendingItems.fold(0.0, (sum, item) => sum + item.totalPayable);
         final missingRates =
             pendingItems.where((item) => item.hasMissingRates).length;
+        final readyToPay = pendingItems
+            .where((item) => !item.hasMissingRates)
+            .fold(0.0, (sum, item) => sum + item.totalPayable);
 
         return RefreshIndicator(
           onRefresh: () async => refreshPayrollData(ref),
@@ -101,73 +133,59 @@ class _PayrollScreenState extends ConsumerState<PayrollScreen> {
                 onCurrent: _goToCurrentWeek,
               ),
               const SizedBox(height: 16),
-              Text(
-                'Pagos pendientes',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  _MetricCard(
-                    icon: Icons.work_outline,
-                    label: 'Trabajo',
-                    value: money.format(gross),
-                  ),
-                  _MetricCard(
-                    icon: Icons.payments_outlined,
-                    label: 'Por cancelar',
-                    value: money.format(total),
-                  ),
-                  _MetricCard(
-                    icon: Icons.sell_outlined,
-                    label: 'Sin precio',
-                    value: '$missingRates',
-                    warning: missingRates > 0,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              OutlinedButton.icon(
-                onPressed: () async {
-                  try {
-                    await ref
-                        .read(payrollRepositoryProvider)
-                        .closeWeek(startDate: _weekStart, endDate: _weekEnd);
-                    refreshPayrollData(ref);
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Semana cerrada correctamente.'),
-                        ),
-                      );
-                    }
-                  } catch (error) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('No se pudo cerrar la semana: $error'),
-                        ),
-                      );
-                    }
-                  }
-                },
-                icon: const Icon(Icons.lock_outline),
-                label: const Text('Cerrar semana'),
+              _PayrollOverview(
+                gross: gross,
+                total: total,
+                readyToPay: readyToPay,
+                missingRates: missingRates,
+                workerCount: pendingItems.length,
+                money: money,
+                onCloseWeek: () => _closeWeek(context, ref),
               ),
               const SizedBox(height: 16),
-              for (final item in pendingItems) ...[
-                _EmployeePayrollCard(summary: item, money: money),
-                const SizedBox(height: 12),
-              ],
+              _PayrollSearchAndFilters(
+                controller: _searchController,
+                filter: _filter,
+                onChanged: () => setState(() {}),
+                onFilterChanged: (value) => setState(() => _filter = value),
+              ),
+              const SizedBox(height: 12),
+              if (visibleItems.isEmpty)
+                const _EmptyPayrollFilter()
+              else
+                for (final item in visibleItems) ...[
+                  _EmployeePayrollCard(summary: item, money: money),
+                  const SizedBox(height: 10),
+                ],
             ],
           ),
         );
       },
     );
   }
+
+  Future<void> _closeWeek(BuildContext context, WidgetRef ref) async {
+    try {
+      await ref
+          .read(payrollRepositoryProvider)
+          .closeWeek(startDate: _weekStart, endDate: _weekEnd);
+      refreshPayrollData(ref);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Semana cerrada correctamente.')),
+        );
+      }
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se pudo cerrar la semana: $error')),
+        );
+      }
+    }
+  }
 }
+
+enum _PayrollFilter { pending, ready, missingRates, paid, all }
 
 class _WeekSelector extends StatelessWidget {
   const _WeekSelector({
@@ -316,255 +334,147 @@ class _EmployeePayrollCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    if (summary.isPaid) {
-      return Card(
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Row(
+    final colorScheme = Theme.of(context).colorScheme;
+    final dayCount = summary.dayGroups.length;
+    final lineCount = summary.lines.length;
+    final hasMissing = summary.hasMissingRates;
+
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: ExpansionTile(
+        tilePadding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+        childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+        leading: CircleAvatar(
+          backgroundColor: colorScheme.primaryContainer,
+          foregroundColor: colorScheme.onPrimaryContainer,
+          child: Text(
+            _initials(summary.employeeName),
+            style: const TextStyle(fontWeight: FontWeight.w900),
+          ),
+        ),
+        title: Text(
+          '${summary.employeeCode} - ${summary.employeeName}',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w900,
+              ),
+        ),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 6,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '${summary.employeeCode} - ${summary.employeeName}',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const Text('Se pagó'),
-                  ],
+              _SmallCountChip(
+                icon: Icons.calendar_today_outlined,
+                label: '$dayCount dias',
+              ),
+              _SmallCountChip(
+                icon: Icons.list_alt_outlined,
+                label: '$lineCount lineas',
+              ),
+              if (hasMissing)
+                const _SmallCountChip(
+                  icon: Icons.sell_outlined,
+                  label: 'Falta precio',
                 ),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(money.format(summary.totalPayable)),
-                  TextButton(
-                    onPressed: () async {
-                      try {
-                        await ref
-                            .read(payrollRepositoryProvider)
-                            .setPaid(summary.employeeId, false);
-                        refreshPayrollData(ref);
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Pago reabierto correctamente.'),
-                            ),
-                          );
-                        }
-                      } catch (error) {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content:
-                                  Text('No se pudo reabrir el pago: $error'),
-                            ),
-                          );
-                        }
-                      }
-                    },
-                    child: const Text('Reabrir'),
-                  ),
-                ],
-              ),
             ],
           ),
         ),
-      );
-    }
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    '${summary.employeeCode} - ${summary.employeeName}',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
+        trailing: SizedBox(
+          width: 124,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  money.format(summary.totalPayable),
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w900,
+                      ),
                 ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(money.format(summary.totalPayable)),
-                    _PaymentStatusChip(isPaid: summary.isPaid),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              summary.hasMissingRates
-                  ? 'Faltan precios por asignar'
-                  : 'Precios completos',
-            ),
-            const Divider(height: 22),
-            for (final dayGroup in summary.dayGroups) ...[
-              _PayrollDayBlock(dayGroup: dayGroup, money: money),
-              if (dayGroup != summary.dayGroups.last)
-                const Divider(height: 18),
+              ),
+              const SizedBox(height: 4),
+              _PaymentStatusChip(isPaid: summary.isPaid),
             ],
-            const Divider(height: 22),
-            Text(
-              'Bonos, anticipos y descuentos',
-              style: Theme.of(context).textTheme.titleSmall,
+          ),
+        ),
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              hasMissing ? 'Faltan precios por asignar' : 'Precios completos',
+              style: TextStyle(
+                color: hasMissing ? colorScheme.error : null,
+                fontWeight: FontWeight.w700,
+              ),
             ),
-            const SizedBox(height: 8),
-            if (summary.adjustments.isEmpty)
-              const Text('Sin ajustes.')
-            else
-              for (final adjustment in summary.adjustments)
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(_adjustmentLabel(adjustment.type)),
-                  subtitle: Text(adjustment.concept),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        '${adjustment.type == 'bonus' ? '+' : '-'} '
-                        '${money.format(adjustment.amount)}',
-                      ),
-                      IconButton(
-                        tooltip: 'Quitar',
-                        icon: const Icon(Icons.delete_outline),
-                        onPressed: () async {
-                          try {
-                            await ref
-                                .read(payrollRepositoryProvider)
-                                .deleteAdjustment(adjustment.id);
-                            refreshPayrollData(ref);
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content:
-                                      Text('Ajuste eliminado correctamente.'),
-                                ),
-                              );
-                            }
-                          } catch (error) {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                      'No se pudo eliminar el ajuste: $error'),
-                                ),
-                              );
-                            }
-                          }
-                        },
-                      ),
-                    ],
-                  ),
+          ),
+          const Divider(height: 22),
+          for (final dayGroup in summary.dayGroups) ...[
+            _PayrollDayBlock(dayGroup: dayGroup, money: money),
+            if (dayGroup != summary.dayGroups.last) const Divider(height: 18),
+          ],
+          const Divider(height: 22),
+          _AdjustmentsSection(
+            summary: summary,
+            money: money,
+            onAdd: (type) => _addAdjustment(context, ref, summary, type),
+            onDelete: (id) => _deleteAdjustment(context, ref, id),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _setPaid(context, ref, false),
+                  icon: const Icon(Icons.lock_open_outlined),
+                  label: const Text('Reabrir'),
                 ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                OutlinedButton(
-                  onPressed: () =>
-                      _addAdjustment(context, ref, summary, 'bonus'),
-                  child: const Text('Bono'),
-                ),
-                OutlinedButton(
-                  onPressed: () =>
-                      _addAdjustment(context, ref, summary, 'advance'),
-                  child: const Text('Anticipo'),
-                ),
-                OutlinedButton(
-                  onPressed: () =>
-                      _addAdjustment(context, ref, summary, 'deduction'),
-                  child: const Text('Descuento'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () async {
-                      try {
-                        await ref
-                            .read(payrollRepositoryProvider)
-                            .setPaid(summary.employeeId, false);
-                        refreshPayrollData(ref);
-                        if (context.mounted) {
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: hasMissing
+                      ? () {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                              content: Text('Pago reabierto correctamente.'),
-                            ),
-                          );
-                        }
-                      } catch (error) {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content:
-                                  Text('No se pudo reabrir el pago: $error'),
-                            ),
-                          );
-                        }
-                      }
-                    },
-                    icon: const Icon(Icons.lock_open_outlined),
-                    label: const Text('Reabrir'),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: summary.hasMissingRates
-                        ? () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Asigna precio a todos los trabajos antes de pagar.',
-                                ),
+                              content: Text(
+                                'Asigna precio a todos los trabajos antes de pagar.',
                               ),
-                            );
-                          }
-                        : () async {
-                            final confirmed = await _confirmPayment(context);
-                            if (!confirmed) return;
-                            try {
-                              await ref
-                                  .read(payrollRepositoryProvider)
-                                  .setPaid(summary.employeeId, true);
-                              refreshPayrollData(ref);
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Pago marcado como pagado.'),
-                                  ),
-                                );
-                              }
-                            } catch (error) {
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                        'No se pudo registrar el pago: $error'),
-                                  ),
-                                );
-                              }
-                            }
-                          },
-                    icon: const Icon(Icons.check_circle_outline),
-                    label: const Text('Marcar pagado'),
-                  ),
+                            ),
+                          );
+                        }
+                      : () async {
+                          final confirmed = await _confirmPayment(context);
+                          if (!confirmed) return;
+                          if (!context.mounted) return;
+                          await _setPaid(context, ref, true);
+                        },
+                  icon: const Icon(Icons.check_circle_outline),
+                  label: const Text('Marcar pagado'),
                 ),
-              ],
-            ),
-          ],
-        ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
+  }
+
+  String _initials(String value) {
+    final parts = value
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((part) => part.isNotEmpty)
+        .toList();
+    if (parts.isEmpty) return '?';
+    if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
+    return '${parts.first.substring(0, 1)}${parts.last.substring(0, 1)}'
+        .toUpperCase();
   }
 
   String _adjustmentLabel(String type) {
@@ -611,13 +521,72 @@ class _EmployeePayrollCard extends ConsumerWidget {
     }
   }
 
+  Future<void> _deleteAdjustment(
+    BuildContext context,
+    WidgetRef ref,
+    String id,
+  ) async {
+    try {
+      await ref.read(payrollRepositoryProvider).deleteAdjustment(id);
+      refreshPayrollData(ref);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Ajuste eliminado correctamente.')),
+        );
+      }
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se pudo eliminar el ajuste: $error')),
+        );
+      }
+    }
+  }
+
+  Future<void> _setPaid(
+    BuildContext context,
+    WidgetRef ref,
+    bool isPaid,
+  ) async {
+    try {
+      await ref.read(payrollRepositoryProvider).setPaid(
+            summary.employeeId,
+            isPaid,
+          );
+      refreshPayrollData(ref);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              isPaid
+                  ? 'Pago marcado como pagado.'
+                  : 'Pago reabierto correctamente.',
+            ),
+          ),
+        );
+      }
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              isPaid
+                  ? 'No se pudo registrar el pago: $error'
+                  : 'No se pudo reabrir el pago: $error',
+            ),
+          ),
+        );
+      }
+    }
+  }
+
   Future<bool> _confirmPayment(BuildContext context) async {
     return await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
             title: const Text('Confirmar pago'),
             content: Text(
-              'Se marcará como pagado ${money.format(summary.totalPayable)} '
+              'Se marcara como pagado ${money.format(summary.totalPayable)} '
               'para ${summary.employeeCode} - ${summary.employeeName}.',
             ),
             actions: [
@@ -633,6 +602,91 @@ class _EmployeePayrollCard extends ConsumerWidget {
           ),
         ) ??
         false;
+  }
+}
+
+class _AdjustmentsSection extends StatelessWidget {
+  const _AdjustmentsSection({
+    required this.summary,
+    required this.money,
+    required this.onAdd,
+    required this.onDelete,
+  });
+
+  final EmployeePayrollSummary summary;
+  final NumberFormat money;
+  final ValueChanged<String> onAdd;
+  final ValueChanged<String> onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Bonos, anticipos y descuentos',
+          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+        ),
+        const SizedBox(height: 8),
+        if (summary.adjustments.isEmpty)
+          const Text('Sin ajustes.')
+        else
+          for (final adjustment in summary.adjustments)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              title: Text(_adjustmentLabel(adjustment.type)),
+              subtitle: Text(adjustment.concept),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '${adjustment.type == 'bonus' ? '+' : '-'} '
+                    '${money.format(adjustment.amount)}',
+                  ),
+                  IconButton(
+                    tooltip: 'Quitar',
+                    icon: const Icon(Icons.delete_outline),
+                    onPressed: () => onDelete(adjustment.id),
+                  ),
+                ],
+              ),
+            ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            OutlinedButton.icon(
+              onPressed: () => onAdd('bonus'),
+              icon: const Icon(Icons.add_circle_outline),
+              label: const Text('Bono'),
+            ),
+            OutlinedButton.icon(
+              onPressed: () => onAdd('advance'),
+              icon: const Icon(Icons.remove_circle_outline),
+              label: const Text('Anticipo'),
+            ),
+            OutlinedButton.icon(
+              onPressed: () => onAdd('deduction'),
+              icon: const Icon(Icons.price_change_outlined),
+              label: const Text('Descuento'),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  String _adjustmentLabel(String type) {
+    return switch (type) {
+      'bonus' => 'Bono',
+      'advance' => 'Anticipo',
+      'deduction' => 'Descuento',
+      _ => type,
+    };
   }
 }
 
@@ -698,6 +752,278 @@ class _PayrollDayBlock extends StatelessWidget {
       DateTime.sunday => 'Domingo',
       _ => '',
     };
+  }
+}
+
+class _PayrollOverview extends StatelessWidget {
+  const _PayrollOverview({
+    required this.gross,
+    required this.total,
+    required this.readyToPay,
+    required this.missingRates,
+    required this.workerCount,
+    required this.money,
+    required this.onCloseWeek,
+  });
+
+  final double gross;
+  final double total;
+  final double readyToPay;
+  final int missingRates;
+  final int workerCount;
+  final NumberFormat money;
+  final VoidCallback onCloseWeek;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: colorScheme.primaryContainer.withValues(alpha: 0.40),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: colorScheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Pagos de la semana',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w900,
+                      ),
+                ),
+              ),
+              _SmallCountChip(
+                icon: Icons.people_outline,
+                label: '$workerCount',
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _MetricCard(
+                icon: Icons.payments_outlined,
+                label: 'Por cancelar',
+                value: money.format(total),
+              ),
+              _MetricCard(
+                icon: Icons.verified_outlined,
+                label: 'Listo para pagar',
+                value: money.format(readyToPay),
+              ),
+              _MetricCard(
+                icon: Icons.work_outline,
+                label: 'Trabajo',
+                value: money.format(gross),
+              ),
+              _MetricCard(
+                icon: Icons.sell_outlined,
+                label: 'Sin precio',
+                value: '$missingRates',
+                warning: missingRates > 0,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: onCloseWeek,
+              icon: const Icon(Icons.lock_outline),
+              label: const Text('Cerrar semana'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PayrollSearchAndFilters extends StatelessWidget {
+  const _PayrollSearchAndFilters({
+    required this.controller,
+    required this.filter,
+    required this.onChanged,
+    required this.onFilterChanged,
+  });
+
+  final TextEditingController controller;
+  final _PayrollFilter filter;
+  final VoidCallback onChanged;
+  final ValueChanged<_PayrollFilter> onFilterChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextField(
+          controller: controller,
+          onChanged: (_) => onChanged(),
+          decoration: InputDecoration(
+            prefixIcon: const Icon(Icons.search),
+            hintText: 'Buscar trabajador',
+            suffixIcon: controller.text.isEmpty
+                ? null
+                : IconButton(
+                    tooltip: 'Limpiar busqueda',
+                    onPressed: () {
+                      controller.clear();
+                      onChanged();
+                    },
+                    icon: const Icon(Icons.close),
+                  ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              _FilterChipButton(
+                label: 'Pendientes',
+                icon: Icons.pending_actions,
+                selected: filter == _PayrollFilter.pending,
+                onSelected: () => onFilterChanged(_PayrollFilter.pending),
+              ),
+              _FilterChipButton(
+                label: 'Listos',
+                icon: Icons.verified_outlined,
+                selected: filter == _PayrollFilter.ready,
+                onSelected: () => onFilterChanged(_PayrollFilter.ready),
+              ),
+              _FilterChipButton(
+                label: 'Sin precio',
+                icon: Icons.sell_outlined,
+                selected: filter == _PayrollFilter.missingRates,
+                onSelected: () => onFilterChanged(_PayrollFilter.missingRates),
+              ),
+              _FilterChipButton(
+                label: 'Pagados',
+                icon: Icons.check_circle_outline,
+                selected: filter == _PayrollFilter.paid,
+                onSelected: () => onFilterChanged(_PayrollFilter.paid),
+              ),
+              _FilterChipButton(
+                label: 'Todos',
+                icon: Icons.list_alt_outlined,
+                selected: filter == _PayrollFilter.all,
+                onSelected: () => onFilterChanged(_PayrollFilter.all),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _FilterChipButton extends StatelessWidget {
+  const _FilterChipButton({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onSelected,
+  });
+
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: ChoiceChip(
+        selected: selected,
+        showCheckmark: false,
+        avatar: Icon(
+          icon,
+          size: 18,
+          color: selected ? colorScheme.onPrimary : colorScheme.primary,
+        ),
+        label: Text(label),
+        selectedColor: colorScheme.primary,
+        labelStyle: TextStyle(
+          color: selected ? colorScheme.onPrimary : colorScheme.onSurface,
+          fontWeight: FontWeight.w800,
+        ),
+        side: BorderSide(color: colorScheme.outlineVariant),
+        onSelected: (_) => onSelected(),
+      ),
+    );
+  }
+}
+
+class _SmallCountChip extends StatelessWidget {
+  const _SmallCountChip({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: colorScheme.outlineVariant),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 18, color: colorScheme.primary),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmptyPayrollFilter extends StatelessWidget {
+  const _EmptyPayrollFilter();
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          children: [
+            Icon(
+              Icons.search_off_outlined,
+              size: 36,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'No hay trabajadores con este filtro.',
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -845,12 +1171,11 @@ class _PayrollLineTile extends ConsumerWidget {
 
   String _quantityText(double quantity, String unit) {
     if (unit == 'hour') return _formatHours(quantity);
-    return '$quantityText ${_unitLabel(unit)}';
+    final formattedQuantity = quantity == quantity.roundToDouble()
+        ? quantity.toStringAsFixed(0)
+        : quantity.toStringAsFixed(2);
+    return '$formattedQuantity ${_unitLabel(unit)}';
   }
-
-  String get quantityText => line.quantity == line.quantity.roundToDouble()
-      ? line.quantity.toStringAsFixed(0)
-      : line.quantity.toStringAsFixed(2);
 
   String _formatHours(double hours) {
     final totalMinutes = (hours * 60).round();
@@ -983,7 +1308,7 @@ class _AssignRateDialogState extends State<_AssignRateDialog> {
 
     if (value == null || value < 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Ingresa un precio válido.')),
+        const SnackBar(content: Text('Ingresa un precio valido.')),
       );
       return;
     }
