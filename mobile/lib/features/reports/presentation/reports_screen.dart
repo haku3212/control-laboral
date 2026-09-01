@@ -110,7 +110,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
                         ? null
                         : () => _sharePdf(filtered, money),
                     icon: const Icon(Icons.picture_as_pdf_outlined),
-                    label: const Text('PDF pagos'),
+                    label: const Text('PDF global'),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -269,6 +269,43 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
     NumberFormat money,
   ) {
     final excel = xl.Excel.createExcel();
+    final workerSummary = excel['Resumen por trabajador'];
+    workerSummary.appendRow([
+      xl.TextCellValue('Codigo'),
+      xl.TextCellValue('Trabajador'),
+      xl.TextCellValue('Trabajo'),
+      xl.TextCellValue('Unidad'),
+      xl.TextCellValue('Cantidad total'),
+      xl.TextCellValue('Precio'),
+      xl.TextCellValue('Total'),
+      xl.TextCellValue('Estado precio'),
+    ]);
+
+    for (final summary in summaries) {
+      for (final line in summary.groupedLines) {
+        workerSummary.appendRow([
+          xl.TextCellValue(summary.employeeCode),
+          xl.TextCellValue(summary.employeeName),
+          xl.TextCellValue(line.workTypeName),
+          xl.TextCellValue(_unitLabel(line.unit)),
+          xl.DoubleCellValue(line.quantity),
+          xl.DoubleCellValue(line.rate ?? 0),
+          xl.DoubleCellValue(line.subtotal),
+          xl.TextCellValue(line.hasMissingRate ? 'Sin precio' : 'Completo'),
+        ]);
+      }
+      workerSummary.appendRow([
+        xl.TextCellValue(''),
+        xl.TextCellValue('${summary.employeeCode} - Total'),
+        xl.TextCellValue(''),
+        xl.TextCellValue(''),
+        xl.TextCellValue(''),
+        xl.TextCellValue(''),
+        xl.DoubleCellValue(summary.totalPayable),
+        xl.TextCellValue(summary.hasMissingRates ? 'Revisar' : 'Listo'),
+      ]);
+    }
+
     final sheet = excel['Planilla'];
     sheet.appendRow([
       xl.TextCellValue('Codigo'),
@@ -415,6 +452,11 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
     NumberFormat money,
   ) async {
     final doc = pw.Document();
+    final dateFormat = DateFormat('dd/MM/yyyy', 'es_BO');
+    final total = summaries.fold(0.0, (sum, item) => sum + item.totalPayable);
+    final missingCount =
+        summaries.where((summary) => summary.hasMissingRates).length;
+
     doc.addPage(
       pw.MultiPage(
         margin: const pw.EdgeInsets.all(32),
@@ -443,6 +485,34 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
                     color: PdfColors.white,
                     fontSize: 12,
                   ),
+                ),
+                pw.SizedBox(height: 4),
+                pw.Text(
+                  '${dateFormat.format(_startDate)} - '
+                  '${dateFormat.format(_endDate)}',
+                  style: const pw.TextStyle(
+                    color: PdfColors.white,
+                    fontSize: 10,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          pw.SizedBox(height: 12),
+          pw.Container(
+            padding: const pw.EdgeInsets.all(10),
+            decoration: pw.BoxDecoration(
+              border: pw.Border.all(color: PdfColors.grey400),
+              borderRadius: pw.BorderRadius.circular(6),
+            ),
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text('Trabajadores: ${summaries.length}'),
+                pw.Text('Con precio pendiente: $missingCount'),
+                pw.Text(
+                  'Total: ${money.format(total)}',
+                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
                 ),
               ],
             ),
@@ -473,14 +543,21 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
                   ),
                   pw.SizedBox(height: 8),
                   pw.TableHelper.fromTextArray(
-                    headers: ['Trabajo', 'Cantidad', 'Precio', 'Subtotal'],
+                    headers: [
+                      'Trabajo',
+                      'Cantidad semanal',
+                      'Precio/un',
+                      'Total',
+                      'Estado',
+                    ],
                     data: [
-                      for (final line in item.lines)
+                      for (final line in item.groupedLines)
                         [
                           line.workTypeName,
                           _quantityText(line.quantity, line.unit),
                           money.format(line.rate ?? 0),
-                          money.format(line.subtotal ?? 0),
+                          money.format(line.subtotal),
+                          line.hasMissingRate ? 'Sin precio' : 'OK',
                         ],
                     ],
                     headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
