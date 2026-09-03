@@ -59,6 +59,8 @@ class _OperatorEntriesScreenState extends ConsumerState<OperatorEntriesScreen> {
                   _OperatorEntryGroupCard(
                     group: group,
                     date: dateFormat.format(group.workDate),
+                    onEdit: _editEntry,
+                    onDelete: _deleteEntry,
                   ),
                   const SizedBox(height: 10),
                 ],
@@ -130,6 +132,69 @@ class _OperatorEntriesScreenState extends ConsumerState<OperatorEntriesScreen> {
     ];
     groups.sort((a, b) => b.workDate.compareTo(a.workDate));
     return groups;
+  }
+
+  Future<void> _editEntry(OperatorEntry entry) async {
+    if (!_canModify(entry)) {
+      _showMessage(
+        'Este registro ya fue revisado. Pide al gerente que lo corrija.',
+      );
+      return;
+    }
+
+    final result = await showDialog<_EditEntryResult>(
+      context: context,
+      builder: (_) => _EditEntryDialog(entry: entry),
+    );
+    if (result == null) return;
+
+    try {
+      await ref.read(operatorEntriesRepositoryProvider).updatePendingEntry(
+            id: entry.id,
+            quantity: result.quantity,
+            note: result.note,
+          );
+      refreshEntryData(ref, date: _selectedDate);
+      _showMessage('Registro actualizado correctamente.');
+    } catch (error) {
+      _showMessage('No se pudo editar: $error');
+    }
+  }
+
+  Future<void> _deleteEntry(OperatorEntry entry) async {
+    if (!_canModify(entry)) {
+      _showMessage(
+        'Este registro ya fue revisado. Pide al gerente que lo corrija.',
+      );
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => _DeleteEntryDialog(entry: entry),
+    );
+    if (confirmed != true) return;
+
+    try {
+      await ref.read(operatorEntriesRepositoryProvider).deletePendingEntry(
+            entry.id,
+          );
+      refreshEntryData(ref, date: _selectedDate);
+      _showMessage('Registro eliminado correctamente.');
+    } catch (error) {
+      _showMessage('No se pudo eliminar: $error');
+    }
+  }
+
+  bool _canModify(OperatorEntry entry) {
+    return entry.status == 'pending' || entry.status == 'draft';
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
   }
 }
 
@@ -287,10 +352,14 @@ class _OperatorEntryGroupCard extends StatelessWidget {
   const _OperatorEntryGroupCard({
     required this.group,
     required this.date,
+    required this.onEdit,
+    required this.onDelete,
   });
 
   final _OperatorEntryGroup group;
   final String date;
+  final ValueChanged<OperatorEntry> onEdit;
+  final ValueChanged<OperatorEntry> onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -350,25 +419,12 @@ class _OperatorEntryGroupCard extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             for (final item in group.items) ...[
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      item.workTypeName,
-                      style: Theme.of(context).textTheme.titleSmall,
-                    ),
-                  ),
-                  Text(
-                    _quantityText(item.quantity, item.workTypeUnit),
-                    style: const TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                ],
+              _OperatorEntryLine(
+                item: item,
+                quantity: _quantityText(item.quantity, item.workTypeUnit),
+                onEdit: () => onEdit(item),
+                onDelete: () => onDelete(item),
               ),
-              if (item.note != null && item.note!.trim().isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Text(item.note!),
-                ),
               if (item != group.items.last) const Divider(height: 16),
             ],
           ],
@@ -418,6 +474,249 @@ class _OperatorEntryGroupCard extends StatelessWidget {
   }
 }
 
+class _OperatorEntryLine extends StatelessWidget {
+  const _OperatorEntryLine({
+    required this.item,
+    required this.quantity,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  final OperatorEntry item;
+  final String quantity;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  bool get canModify => item.status == 'pending' || item.status == 'draft';
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: colorScheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  item.workTypeName,
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                ),
+              ),
+              Text(
+                quantity,
+                style: const TextStyle(fontWeight: FontWeight.w900),
+              ),
+            ],
+          ),
+          if (item.note != null && item.note!.trim().isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(item.note!),
+          ],
+          const SizedBox(height: 10),
+          if (canModify)
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onEdit,
+                    icon: const Icon(Icons.edit_outlined),
+                    label: const Text('Editar'),
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size.fromHeight(48),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onDelete,
+                    icon: const Icon(Icons.delete_outline),
+                    label: const Text('Eliminar'),
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size.fromHeight(48),
+                      foregroundColor: colorScheme.error,
+                      side: BorderSide(color: colorScheme.error),
+                    ),
+                  ),
+                ),
+              ],
+            )
+          else
+            Text(
+              'Ya fue revisado por gerente.',
+              style: TextStyle(
+                color: colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EditEntryResult {
+  const _EditEntryResult({
+    required this.quantity,
+    required this.note,
+  });
+
+  final double quantity;
+  final String? note;
+}
+
+class _EditEntryDialog extends StatefulWidget {
+  const _EditEntryDialog({required this.entry});
+
+  final OperatorEntry entry;
+
+  @override
+  State<_EditEntryDialog> createState() => _EditEntryDialogState();
+}
+
+class _EditEntryDialogState extends State<_EditEntryDialog> {
+  late final TextEditingController _quantityController;
+  late final TextEditingController _noteController;
+
+  @override
+  void initState() {
+    super.initState();
+    _quantityController = TextEditingController(
+      text: _formatNumber(widget.entry.quantity),
+    );
+    _noteController = TextEditingController(text: widget.entry.note ?? '');
+  }
+
+  @override
+  void dispose() {
+    _quantityController.dispose();
+    _noteController.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    final quantity = double.tryParse(
+      _quantityController.text.trim().replaceAll(',', '.'),
+    );
+    if (quantity == null || quantity <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Escribe una cantidad mayor a cero.')),
+      );
+      return;
+    }
+
+    final note = _noteController.text.trim();
+    Navigator.of(context).pop(
+      _EditEntryResult(
+        quantity: quantity,
+        note: note.isEmpty ? null : note,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Editar registro'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              widget.entry.workTypeName,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _quantityController,
+              autofocus: true,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w900,
+                  ),
+              decoration: InputDecoration(
+                labelText: 'Cantidad',
+                suffixText: _unitLabel(widget.entry.workTypeUnit),
+              ),
+              onTap: () => _quantityController.selection = TextSelection(
+                baseOffset: 0,
+                extentOffset: _quantityController.text.length,
+              ),
+              onSubmitted: (_) => _save(),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _noteController,
+              minLines: 1,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Nota opcional',
+                prefixIcon: Icon(Icons.notes_outlined),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton.icon(
+          onPressed: _save,
+          icon: const Icon(Icons.save_outlined),
+          label: const Text('Guardar'),
+        ),
+      ],
+    );
+  }
+}
+
+class _DeleteEntryDialog extends StatelessWidget {
+  const _DeleteEntryDialog({required this.entry});
+
+  final OperatorEntry entry;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Eliminar registro'),
+      content: Text(
+        'Se eliminara "${entry.workTypeName}" con cantidad '
+        '${_formatNumber(entry.quantity)} ${_unitLabel(entry.workTypeUnit)}. '
+        'Si fue un error, despues puedes volver a registrarlo.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton.icon(
+          onPressed: () => Navigator.of(context).pop(true),
+          icon: const Icon(Icons.delete_outline),
+          label: const Text('Eliminar'),
+        ),
+      ],
+    );
+  }
+}
+
 class _InfoPill extends StatelessWidget {
   const _InfoPill({
     required this.icon,
@@ -445,6 +744,25 @@ class _InfoPill extends StatelessWidget {
       ),
     );
   }
+}
+
+String _formatNumber(double value) {
+  return value == value.roundToDouble()
+      ? value.toStringAsFixed(0)
+      : value.toStringAsFixed(2);
+}
+
+String _unitLabel(String value) {
+  return switch (value) {
+    'hour' => 'h',
+    'day' => 'dia',
+    'unit' => 'unid.',
+    'service' => 'serv.',
+    'bag' => 'bolsa',
+    'bucket' => 'tacho',
+    'tray' => 'bandeja',
+    _ => value,
+  };
 }
 
 class _StatusChip extends StatelessWidget {

@@ -120,6 +120,53 @@ class OperatorEntriesRepository {
     ]);
   }
 
+  Future<void> updatePendingEntry({
+    required String id,
+    required double quantity,
+    String? note,
+  }) async {
+    final userId = _client.auth.currentUser?.id;
+    final empresaId = await _empresaId();
+    final rows = await _client
+        .from('work_entries')
+        .update({
+          'quantity': quantity,
+          'horas_normales': quantity,
+          'note': _blankToNull(note),
+          'modificado_por': userId,
+          'fecha_modificacion': DateTime.now().toIso8601String(),
+        })
+        .eq('id', id)
+        .eq('empresa_id', empresaId)
+        .eq('registered_by', userId!)
+        .inFilter('status', ['draft', 'pending'])
+        .select('id');
+
+    if (rows.isEmpty) {
+      throw StateError(
+        'Solo puedes editar registros pendientes enviados por tu usuario.',
+      );
+    }
+  }
+
+  Future<void> deletePendingEntry(String id) async {
+    final userId = _client.auth.currentUser?.id;
+    final empresaId = await _empresaId();
+    final rows = await _client
+        .from('work_entries')
+        .delete()
+        .eq('id', id)
+        .eq('empresa_id', empresaId)
+        .eq('registered_by', userId!)
+        .inFilter('status', ['draft', 'pending']).select('id');
+
+    if (rows.isEmpty) {
+      throw StateError(
+        'Solo puedes eliminar registros pendientes enviados por tu usuario.',
+      );
+    }
+  }
+
   String? _blankToNull(String? value) {
     final text = value?.trim();
     return text == null || text.isEmpty ? null : text;
