@@ -157,7 +157,7 @@ class _OperatorEntriesScreenState extends ConsumerState<OperatorEntriesScreen> {
       refreshEntryData(ref, date: _selectedDate);
       _showMessage('Registro actualizado correctamente.');
     } catch (error) {
-      _showMessage('No se pudo editar: $error');
+      _showMessage(_friendlyError('No se pudo editar', error));
     }
   }
 
@@ -182,7 +182,7 @@ class _OperatorEntriesScreenState extends ConsumerState<OperatorEntriesScreen> {
       refreshEntryData(ref, date: _selectedDate);
       _showMessage('Registro eliminado correctamente.');
     } catch (error) {
-      _showMessage('No se pudo eliminar: $error');
+      _showMessage(_friendlyError('No se pudo eliminar', error));
     }
   }
 
@@ -195,6 +195,14 @@ class _OperatorEntriesScreenState extends ConsumerState<OperatorEntriesScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message)),
     );
+  }
+
+  String _friendlyError(String action, Object error) {
+    final text = error
+        .toString()
+        .replaceFirst('Bad state: ', '')
+        .replaceFirst('Exception: ', '');
+    return '$action: $text';
   }
 }
 
