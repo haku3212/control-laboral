@@ -54,7 +54,7 @@ class WorkEntriesRepository {
       }
     }
 
-    final rows = await query.order('work_date', ascending: false).limit(100);
+    final rows = await query.order('work_date', ascending: false).limit(500);
     return [for (final row in rows) WorkEntry.fromMap(row)];
   }
 
