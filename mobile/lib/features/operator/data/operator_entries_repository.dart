@@ -47,7 +47,7 @@ class OperatorEntriesRepository {
       query = query.gte('work_date', _dateFormat.format(cutoff));
     }
 
-    final rows = await query.order('work_date', ascending: false).limit(50);
+    final rows = await query.order('work_date', ascending: false).limit(300);
     return [for (final row in rows) OperatorEntry.fromMap(row)];
   }
 
