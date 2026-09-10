@@ -58,6 +58,20 @@ class WorkEntriesRepository {
     return [for (final row in rows) WorkEntry.fromMap(row)];
   }
 
+  Future<DateTime?> latestPendingDate() async {
+    final empresaId = await _empresaId();
+    final rows = await _client
+        .from('work_entries')
+        .select('work_date')
+        .eq('empresa_id', empresaId)
+        .inFilter('status', ['draft', 'pending'])
+        .order('work_date', ascending: false)
+        .limit(1);
+
+    if (rows.isEmpty) return null;
+    return DateTime.parse(rows.first['work_date'] as String);
+  }
+
   String _dateText(DateTime date) {
     final year = date.year.toString().padLeft(4, '0');
     final month = date.month.toString().padLeft(2, '0');

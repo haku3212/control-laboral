@@ -17,6 +17,7 @@ class EntriesScreen extends ConsumerStatefulWidget {
 
 class _EntriesScreenState extends ConsumerState<EntriesScreen> {
   late DateTime _weekStart;
+  var _userChangedWeek = false;
 
   DateTime get _weekEnd => _weekStart.add(const Duration(days: 6));
 
@@ -24,6 +25,7 @@ class _EntriesScreenState extends ConsumerState<EntriesScreen> {
   void initState() {
     super.initState();
     _weekStart = _startOfWeek(DateTime.now());
+    Future.microtask(_openLatestPendingWeek);
   }
 
   @override
@@ -116,12 +118,16 @@ class _EntriesScreenState extends ConsumerState<EntriesScreen> {
 
   void _moveWeek(int weeks) {
     setState(() {
+      _userChangedWeek = true;
       _weekStart = _weekStart.add(Duration(days: weeks * 7));
     });
   }
 
   void _setCurrentWeek() {
-    setState(() => _weekStart = _startOfWeek(DateTime.now()));
+    setState(() {
+      _userChangedWeek = true;
+      _weekStart = _startOfWeek(DateTime.now());
+    });
   }
 
   Future<void> _pickWeek() async {
@@ -132,7 +138,24 @@ class _EntriesScreenState extends ConsumerState<EntriesScreen> {
       initialDate: _weekStart,
     );
     if (picked == null) return;
-    setState(() => _weekStart = _startOfWeek(picked));
+    setState(() {
+      _userChangedWeek = true;
+      _weekStart = _startOfWeek(picked);
+    });
+  }
+
+  Future<void> _openLatestPendingWeek() async {
+    try {
+      final pendingDate =
+          await ref.read(workEntriesRepositoryProvider).latestPendingDate();
+      if (!mounted || pendingDate == null || _userChangedWeek) return;
+
+      final pendingWeek = _startOfWeek(pendingDate);
+      if (pendingWeek == _weekStart) return;
+      setState(() => _weekStart = pendingWeek);
+    } catch (_) {
+      // If this helper fails, the normal current-week view still works.
+    }
   }
 
   Future<void> _setGroupStatus(
