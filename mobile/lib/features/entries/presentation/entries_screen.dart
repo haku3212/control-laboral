@@ -18,6 +18,7 @@ class EntriesScreen extends ConsumerStatefulWidget {
 class _EntriesScreenState extends ConsumerState<EntriesScreen> {
   late DateTime _weekStart;
   var _userChangedWeek = false;
+  var _filter = _EntryReviewFilter.pending;
 
   DateTime get _weekEnd => _weekStart.add(const Duration(days: 6));
 
@@ -42,7 +43,10 @@ class _EntriesScreenState extends ConsumerState<EntriesScreen> {
     return AsyncValueView(
       value: entries,
       data: (items) {
-        final groups = _groupByEmployee(items);
+        final pendingItems = items.where(_isPending).toList();
+        final visibleItems =
+            _filter == _EntryReviewFilter.pending ? pendingItems : items;
+        final groups = _groupByEmployee(visibleItems);
 
         return RefreshIndicator(
           onRefresh: () async {
@@ -64,11 +68,22 @@ class _EntriesScreenState extends ConsumerState<EntriesScreen> {
                 onCurrent: _setCurrentWeek,
               ),
               const SizedBox(height: 12),
-              if (items.isEmpty)
-                const EmptyState(
+              _EntryFilterBar(
+                selected: _filter,
+                pendingCount: pendingItems.length,
+                totalCount: items.length,
+                onChanged: (value) => setState(() => _filter = value),
+              ),
+              const SizedBox(height: 12),
+              if (visibleItems.isEmpty)
+                EmptyState(
                   icon: Icons.assignment_outlined,
-                  title: 'Sin registros',
-                  message: 'No hay registros para la semana seleccionada.',
+                  title: _filter == _EntryReviewFilter.pending
+                      ? 'Sin pendientes'
+                      : 'Sin registros',
+                  message: _filter == _EntryReviewFilter.pending
+                      ? 'No hay pendientes para aprobar en esta semana.'
+                      : 'No hay registros para la semana seleccionada.',
                 )
               else
                 for (final group in groups) ...[
@@ -188,7 +203,13 @@ class _EntriesScreenState extends ConsumerState<EntriesScreen> {
         ? value.toStringAsFixed(0)
         : value.toStringAsFixed(2);
   }
+
+  bool _isPending(WorkEntry item) {
+    return item.status == 'draft' || item.status == 'pending';
+  }
 }
+
+enum _EntryReviewFilter { pending, all }
 
 class _WeekHeader extends StatelessWidget {
   const _WeekHeader({
@@ -243,6 +264,41 @@ class _WeekHeader extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _EntryFilterBar extends StatelessWidget {
+  const _EntryFilterBar({
+    required this.selected,
+    required this.pendingCount,
+    required this.totalCount,
+    required this.onChanged,
+  });
+
+  final _EntryReviewFilter selected;
+  final int pendingCount;
+  final int totalCount;
+  final ValueChanged<_EntryReviewFilter> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return SegmentedButton<_EntryReviewFilter>(
+      segments: [
+        ButtonSegment<_EntryReviewFilter>(
+          value: _EntryReviewFilter.pending,
+          icon: const Icon(Icons.pending_actions_outlined),
+          label: Text('Pendientes ($pendingCount)'),
+        ),
+        ButtonSegment<_EntryReviewFilter>(
+          value: _EntryReviewFilter.all,
+          icon: const Icon(Icons.list_alt_outlined),
+          label: Text('Todos ($totalCount)'),
+        ),
+      ],
+      selected: {selected},
+      showSelectedIcon: false,
+      onSelectionChanged: (values) => onChanged(values.first),
     );
   }
 }
@@ -387,7 +443,6 @@ class _EmployeeEntriesGroup extends StatelessWidget {
     if (parts.length == 1) return parts.first[0].toUpperCase();
     return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
   }
-
 }
 
 class _DayBlock extends StatelessWidget {
